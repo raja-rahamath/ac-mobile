@@ -1,0 +1,46 @@
+{
+  "expo": {
+    "name": "AgentCare Technician",
+    "slug": "agentcare-technician",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "agentcare-tech",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#10b981"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.agentcare.technician",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AgentCare needs your location to navigate to job sites and share ETA with customers.",
+        "NSLocationAlwaysUsageDescription": "AgentCare needs your location to track your route during service calls.",
+        "NSCameraUsageDescription": "AgentCare needs camera access to capture photos of completed work."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#10b981"
+      },
+      "package": "com.agentcare.technician",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-location",
+      "expo-camera"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

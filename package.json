@@ -1,0 +1,26 @@
+{
+  "name": "agentcare-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "customer": "yarn workspace customer",
+    "employee": "yarn workspace employee",
+    "dev:customer": "yarn workspace customer start",
+    "dev:employee": "yarn workspace employee start",
+    "lint": "eslint apps packages --ext .ts,.tsx",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json}\""
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.14.0",
+    "@typescript-eslint/parser": "^8.14.0",
+    "eslint": "^9.15.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  },
+  "packageManager": "yarn@4.0.0"
+}
