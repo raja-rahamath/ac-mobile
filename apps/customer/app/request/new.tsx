@@ -4,14 +4,22 @@ import {
   ScrollView,
   TextInput,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   useColorScheme,
   Alert,
+  ActivityIndicator,
+  Modal,
+  Platform,
 } from 'react-native';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
+import { getMyProperties } from '../../src/services/propertyService';
+import { createServiceRequest } from '../../src/services/requestService';
+import type { Property, ServiceRequest } from '../../src/types';
 
 const SERVICE_CATEGORIES = [
   { id: 'plumbing', label: 'Plumbing', icon: 'water', color: '#3b82f6' },
@@ -39,8 +47,19 @@ export default function NewRequestScreen() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
-  const [property, setProperty] = useState('');
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Properties state
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [isLoadingProperties, setIsLoadingProperties] = useState(true);
+  const [showPropertyPicker, setShowPropertyPicker] = useState(false);
+  const [showNoPropertyAlert, setShowNoPropertyAlert] = useState(false);
+
+  // Success modal state
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdRequest, setCreatedRequest] = useState<ServiceRequest | null>(null);
+  const [requestNumberCopied, setRequestNumberCopied] = useState(false);
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? colors.backgroundDark : colors.background },
@@ -57,27 +76,263 @@ export default function NewRequestScreen() {
     },
   };
 
+  useEffect(() => {
+    fetchProperties();
+  }, []);
+
+  const fetchProperties = async () => {
+    try {
+      setIsLoadingProperties(true);
+      console.log('[NewRequest] Fetching properties...');
+      const props = await getMyProperties();
+      console.log('[NewRequest] Properties fetched:', props.length, 'properties');
+
+      // Update properties state
+      setProperties(props);
+
+      // Auto-select primary property or first one
+      if (props.length > 0) {
+        const primary = props.find(p => p.isPrimary) || props[0];
+        setSelectedProperty(primary);
+        console.log('[NewRequest] Selected property:', primary.id);
+      } else {
+        // No properties - show alert
+        console.log('[NewRequest] No properties found, showing modal');
+        setShowNoPropertyAlert(true);
+      }
+    } catch (error) {
+      console.error('[NewRequest] Error fetching properties:', error);
+      // On error, assume no properties and show the modal to add one
+      console.log('[NewRequest] Error occurred, showing modal');
+      setProperties([]);
+      setShowNoPropertyAlert(true);
+    } finally {
+      setIsLoadingProperties(false);
+    }
+  };
+
+  const showAlert = (title: string, message: string, onOk?: () => void) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n\n${message}`);
+      if (onOk) onOk();
+    } else {
+      Alert.alert(title, message, [{ text: 'OK', onPress: onOk }]);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!category || !title || !description) {
-      Alert.alert('Missing Information', 'Please fill in all required fields.');
+      showAlert('Missing Information', 'Please fill in all required fields.');
+      return;
+    }
+
+    // Validate property is selected
+    if (!selectedProperty) {
+      setShowNoPropertyAlert(true);
       return;
     }
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      const result = await createServiceRequest({
+        title,
+        description,
+        category,
+        priority,
+        propertyId: selectedProperty?.id,
+      });
+
+      // Store the created request and show success modal
+      setCreatedRequest(result);
+      setShowSuccessModal(true);
+    } catch (error: any) {
+      console.error('Error creating request:', error);
+      let errorMessage = 'Failed to submit request. Please try again.';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null) {
+        errorMessage = error.message || error.error || JSON.stringify(error);
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      }
+      showAlert('Error', errorMessage);
+    } finally {
       setIsSubmitting(false);
-      Alert.alert(
-        'Request Submitted',
-        'Your service request has been submitted successfully. We will assign a technician shortly.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
-    }, 1500);
+    }
   };
+
+  const copyRequestNumber = async () => {
+    if (createdRequest?.requestNo) {
+      await Clipboard.setStringAsync(createdRequest.requestNo);
+      setRequestNumberCopied(true);
+      setTimeout(() => setRequestNumberCopied(false), 2000);
+    }
+  };
+
+  const handleSuccessOk = () => {
+    setShowSuccessModal(false);
+    // Navigate to requests tab
+    router.replace('/(tabs)/requests');
+  };
+
+  const handleNoPropertyDismiss = () => {
+    // Navigate back since property is required for service request
+    setShowNoPropertyAlert(false);
+    router.back();
+  };
+
+  if (isLoadingProperties) {
+    return (
+      <View style={[styles.loadingContainer, dynamicStyles.container]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading your properties...</Text>
+      </View>
+    );
+  }
 
   return (
     <ScrollView style={[styles.container, dynamicStyles.container]}>
+      {/* No Property Alert Modal */}
+      <Modal
+        visible={showNoPropertyAlert}
+        transparent
+        animationType="fade"
+        onRequestClose={handleNoPropertyDismiss}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, dynamicStyles.card]}>
+            <View style={styles.modalIconContainer}>
+              <Ionicons name="home-outline" size={48} color={colors.primary} />
+            </View>
+            <Text style={[styles.modalTitle, dynamicStyles.text]}>No Property Found</Text>
+            <Text style={[styles.modalMessage, dynamicStyles.textMuted]}>
+              You need to register a property before creating a service request. It only takes a minute!
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonSecondary]}
+                onPress={() => {
+                  setShowNoPropertyAlert(false);
+                  router.back();
+                }}
+              >
+                <Text style={styles.modalButtonSecondaryText}>Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonPrimary]}
+                onPress={() => {
+                  setShowNoPropertyAlert(false);
+                  router.push('/property/add?returnTo=newRequest');
+                }}
+              >
+                <Text style={styles.modalButtonPrimaryText}>Add Property</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        visible={showSuccessModal}
+        transparent
+        animationType="fade"
+        onRequestClose={handleSuccessOk}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, dynamicStyles.card]}>
+            <View style={[styles.modalIconContainer, { backgroundColor: colors.success + '15' }]}>
+              <Ionicons name="checkmark-circle" size={48} color={colors.success} />
+            </View>
+            <Text style={[styles.modalTitle, dynamicStyles.text]}>Request Submitted!</Text>
+            <Text style={[styles.modalMessage, dynamicStyles.textMuted]}>
+              Your service request has been submitted successfully. We will assign a technician shortly.
+            </Text>
+
+            {/* Request Number Card */}
+            <View style={[styles.requestNumberCard, dynamicStyles.card]}>
+              <Text style={[styles.requestNumberLabel, dynamicStyles.textMuted]}>Request Number</Text>
+              <View style={styles.requestNumberRow}>
+                <Text style={[styles.requestNumber, dynamicStyles.text]}>
+                  {createdRequest?.requestNo || 'N/A'}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.copyButton, requestNumberCopied && styles.copyButtonSuccess]}
+                  onPress={copyRequestNumber}
+                >
+                  <Ionicons
+                    name={requestNumberCopied ? 'checkmark' : 'copy-outline'}
+                    size={18}
+                    color={requestNumberCopied ? colors.success : colors.primary}
+                  />
+                  <Text style={[styles.copyButtonText, requestNumberCopied && { color: colors.success }]}>
+                    {requestNumberCopied ? 'Copied!' : 'Copy'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.modalButton, styles.modalButtonPrimary, { width: '100%', marginTop: spacing.md }]}
+              onPress={handleSuccessOk}
+            >
+              <Text style={styles.modalButtonPrimaryText}>View My Requests</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Property Selection Modal */}
+      <Modal
+        visible={showPropertyPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPropertyPicker(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.pickerContent, dynamicStyles.card]}>
+            <View style={styles.pickerHeader}>
+              <Text style={[styles.pickerTitle, dynamicStyles.text]}>Select Property</Text>
+              <TouchableOpacity onPress={() => setShowPropertyPicker(false)}>
+                <Ionicons name="close" size={24} color={isDark ? colors.textDark : colors.text} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.pickerList}>
+              {properties.map((prop) => (
+                <TouchableOpacity
+                  key={prop.id}
+                  style={[
+                    styles.pickerItem,
+                    dynamicStyles.card,
+                    selectedProperty?.id === prop.id && styles.pickerItemSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedProperty(prop);
+                    setShowPropertyPicker(false);
+                  }}
+                >
+                  <View style={styles.pickerItemContent}>
+                    <Ionicons name="location" size={20} color={colors.primary} />
+                    <View style={styles.pickerItemText}>
+                      <Text style={[styles.pickerItemTitle, dynamicStyles.text]}>
+                        {prop.address || `Unit ${prop.unitNo}`}
+                      </Text>
+                      {prop.isPrimary && (
+                        <Text style={styles.primaryBadge}>Primary</Text>
+                      )}
+                    </View>
+                  </View>
+                  {selectedProperty?.id === prop.id && (
+                    <Ionicons name="checkmark-circle" size={24} color={colors.primary} />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Category Selection */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>Service Type *</Text>
@@ -164,13 +419,32 @@ export default function NewRequestScreen() {
       {/* Property */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>Property Address</Text>
-        <TouchableOpacity style={[styles.input, styles.selectButton, dynamicStyles.input]}>
+        <TouchableOpacity
+          style={[styles.input, styles.selectButton, dynamicStyles.input]}
+          onPress={() => properties.length > 0 && setShowPropertyPicker(true)}
+          disabled={properties.length === 0}
+        >
           <Ionicons name="location-outline" size={20} color={isDark ? colors.textMutedDark : colors.textMuted} />
-          <Text style={[styles.selectText, dynamicStyles.textMuted]}>
-            {property || 'Select a property'}
+          <Text
+            style={[
+              styles.selectText,
+              selectedProperty ? dynamicStyles.text : dynamicStyles.textMuted,
+            ]}
+            numberOfLines={1}
+          >
+            {selectedProperty?.address || selectedProperty?.unitNo || 'No property selected'}
           </Text>
-          <Ionicons name="chevron-down" size={20} color={isDark ? colors.textMutedDark : colors.textMuted} />
+          {properties.length > 1 && (
+            <Ionicons name="chevron-down" size={20} color={isDark ? colors.textMutedDark : colors.textMuted} />
+          )}
         </TouchableOpacity>
+        {properties.length === 0 && (
+          <TouchableOpacity onPress={() => router.push('/property/add?returnTo=newRequest')}>
+            <Text style={[styles.helperText, { color: colors.primary }]}>
+              No properties registered. Tap here to add one.
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Photos */}
@@ -187,15 +461,22 @@ export default function NewRequestScreen() {
 
       {/* Submit Button */}
       <View style={styles.submitContainer}>
-        <TouchableOpacity
-          style={[styles.submitButton, isSubmitting && styles.submitButtonDisabled]}
+        <Pressable
+          style={({ pressed }) => [
+            styles.submitButton,
+            isSubmitting && styles.submitButtonDisabled,
+            pressed && styles.submitButtonPressed,
+            { cursor: 'pointer' } as any,
+          ]}
           onPress={handleSubmit}
           disabled={isSubmitting}
         >
-          <Text style={styles.submitButtonText}>
-            {isSubmitting ? 'Submitting...' : 'Submit Request'}
-          </Text>
-        </TouchableOpacity>
+          {isSubmitting ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.submitButtonText}>Submit Request</Text>
+          )}
+        </Pressable>
       </View>
 
       <View style={{ height: spacing.xxl }} />
@@ -205,6 +486,15 @@ export default function NewRequestScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  loadingText: {
+    fontSize: fontSize.md,
+  },
   section: {
     padding: spacing.lg,
     paddingBottom: 0,
@@ -303,6 +593,11 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: fontSize.md,
   },
+  helperText: {
+    fontSize: fontSize.xs,
+    marginTop: spacing.xs,
+    marginLeft: spacing.xs,
+  },
   photoButton: {
     alignItems: 'center',
     padding: spacing.xl,
@@ -332,9 +627,170 @@ const styles = StyleSheet.create({
   submitButtonDisabled: {
     opacity: 0.6,
   },
+  submitButtonPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.98 }],
+  },
   submitButtonText: {
     color: colors.white,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  modalContent: {
+    width: '100%',
+    maxWidth: 340,
+    padding: spacing.xl,
+    borderRadius: borderRadius.xl,
+    alignItems: 'center',
+  },
+  modalIconContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.primary + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    marginBottom: spacing.sm,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    fontSize: fontSize.md,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: spacing.lg,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    width: '100%',
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+  },
+  modalButtonPrimary: {
+    backgroundColor: colors.primary,
+  },
+  modalButtonPrimaryText: {
+    color: colors.white,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+  },
+  modalButtonSecondary: {
+    backgroundColor: colors.primary + '15',
+  },
+  modalButtonSecondaryText: {
+    color: colors.primary,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+  },
+  // Picker styles
+  pickerContent: {
+    width: '100%',
+    maxHeight: '70%',
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+    position: 'absolute',
+    bottom: 0,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  pickerTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+  },
+  pickerList: {
+    padding: spacing.lg,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    marginBottom: spacing.sm,
+  },
+  pickerItemSelected: {
+    borderColor: colors.primary,
+    borderWidth: 2,
+  },
+  pickerItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    flex: 1,
+  },
+  pickerItemText: {
+    flex: 1,
+  },
+  pickerItemTitle: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.medium,
+  },
+  primaryBadge: {
+    fontSize: fontSize.xs,
+    color: colors.primary,
+    marginTop: 2,
+  },
+  // Success modal styles
+  requestNumberCard: {
+    width: '100%',
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    marginTop: spacing.sm,
+  },
+  requestNumberLabel: {
+    fontSize: fontSize.sm,
+    marginBottom: spacing.xs,
+  },
+  requestNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  requestNumber: {
+    fontSize: fontSize.xl,
+    fontWeight: fontWeight.bold,
+    letterSpacing: 1,
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primary + '15',
+  },
+  copyButtonSuccess: {
+    backgroundColor: colors.success + '15',
+  },
+  copyButtonText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+    color: colors.primary,
   },
 });

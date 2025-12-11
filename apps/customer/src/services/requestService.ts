@@ -1,0 +1,127 @@
+import { ENDPOINTS } from '../constants/api';
+import { api } from './apiClient';
+import type { ServiceRequest, ServiceCategory } from '../types';
+
+interface ServiceRequestsResponse {
+  data: ServiceRequest[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+// Map complaint type names to mobile categories
+const COMPLAINT_TYPE_TO_CATEGORY: Record<string, ServiceCategory> = {
+  'Plumbing': 'plumbing',
+  'Electrical': 'electrical',
+  'AC Maintenance': 'hvac',
+  'HVAC': 'hvac',
+  'General Maintenance': 'general',
+  'Cleaning': 'cleaning',
+  'Pest Control': 'pest_control',
+  'Landscaping': 'landscaping',
+};
+
+// Transform API response to mobile-friendly format
+function transformServiceRequest(apiItem: any): ServiceRequest {
+  // Build property address from unit/building or property
+  let propertyAddress = 'No address specified';
+  if (apiItem.unit) {
+    const unitNo = apiItem.unit.unitNo || apiItem.unit.flatNumber || '';
+    const buildingName = apiItem.unit.building?.name || '';
+    propertyAddress = buildingName ? `${unitNo}, ${buildingName}` : unitNo;
+  } else if (apiItem.property?.name) {
+    propertyAddress = apiItem.property.name;
+  }
+
+  // Map complaint type to category
+  const category: ServiceCategory = apiItem.complaintType?.name
+    ? COMPLAINT_TYPE_TO_CATEGORY[apiItem.complaintType.name] || 'general'
+    : 'general';
+
+  // Map assigned employee to technician
+  const assignedTechnician = apiItem.assignedTo
+    ? {
+        id: apiItem.assignedTo.id,
+        name: `${apiItem.assignedTo.firstName || ''} ${apiItem.assignedTo.lastName || ''}`.trim() || 'Unknown',
+        phone: apiItem.assignedTo.phone,
+      }
+    : undefined;
+
+  return {
+    id: apiItem.id,
+    requestNo: apiItem.requestNo, // SR-00001 format
+    title: apiItem.title,
+    description: apiItem.description || '',
+    category,
+    status: apiItem.status,
+    priority: (apiItem.priority || 'MEDIUM').toLowerCase() as any,
+    propertyId: apiItem.unit?.id || apiItem.property?.id,
+    propertyAddress,
+    scheduledDate: apiItem.startedAt,
+    assignedTechnician,
+    createdAt: apiItem.createdAt,
+    updatedAt: apiItem.createdAt, // API doesn't return updatedAt in list view
+  };
+}
+
+// Statuses that are considered "active" (not completed/cancelled/closed)
+const ACTIVE_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'ON_HOLD', 'pending', 'confirmed', 'assigned', 'en_route', 'in_progress'];
+
+export async function getServiceRequests(
+  filter?: 'all' | 'active' | 'completed'
+): Promise<ServiceRequestsResponse> {
+  let url = ENDPOINTS.SERVICE_REQUESTS;
+
+  // Add filter query params
+  const params = new URLSearchParams();
+  if (filter === 'completed') {
+    params.append('status', 'COMPLETED');
+  }
+  // For 'active' and 'all', fetch all and filter client-side
+  // This is because API may not support multiple status values
+
+  if (params.toString()) {
+    url += `?${params.toString()}`;
+  }
+
+  const data = await api.get(url);
+  let rawData = data.data || [];
+
+  // Client-side filter for active requests
+  if (filter === 'active') {
+    rawData = rawData.filter((item: any) => ACTIVE_STATUSES.includes(item.status));
+  }
+
+  return {
+    data: rawData.map(transformServiceRequest),
+    pagination: data.pagination || { page: 1, limit: 20, total: 0, totalPages: 0 },
+  };
+}
+
+export async function getServiceRequestById(id: string): Promise<ServiceRequest> {
+  const data = await api.get(ENDPOINTS.SERVICE_REQUEST_DETAIL(id));
+  return data.data || data;
+}
+
+export interface CreateServiceRequestInput {
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  propertyId?: string;
+}
+
+export async function createServiceRequest(
+  input: CreateServiceRequestInput
+): Promise<ServiceRequest> {
+  const data = await api.post(ENDPOINTS.SERVICE_REQUESTS, input);
+  const rawData = data.data || data;
+  // Return raw data with requestNo preserved
+  return {
+    ...rawData,
+    requestNo: rawData.requestNo || rawData.request_no, // Handle both formats
+  };
+}

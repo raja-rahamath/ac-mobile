@@ -9,6 +9,7 @@ export interface User {
 
 export interface ServiceRequest {
   id: string;
+  requestNo?: string; // SR-00001 format from API
   title: string;
   description: string;
   category: ServiceCategory;
@@ -40,7 +41,15 @@ export type ServiceStatus =
   | 'en_route'
   | 'in_progress'
   | 'completed'
-  | 'cancelled';
+  | 'cancelled'
+  // API returns uppercase - we'll map them
+  | 'NEW'
+  | 'ASSIGNED'
+  | 'IN_PROGRESS'
+  | 'ON_HOLD'
+  | 'COMPLETED'
+  | 'CANCELLED'
+  | 'CLOSED';
 
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 
@@ -74,4 +83,24 @@ export interface Notification {
   read: boolean;
   createdAt: string;
   data?: Record<string, unknown>;
+}
+
+export interface Property {
+  id: string;
+  unitNo: string;
+  building?: {
+    id: string;
+    name: string;
+    area?: {
+      id: string;
+      name: string;
+    };
+  };
+  type?: {
+    id: string;
+    name: string;
+  };
+  ownershipType: 'OWNER' | 'TENANT';
+  isPrimary: boolean;
+  address?: string;
 }

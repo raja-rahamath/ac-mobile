@@ -9,10 +9,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useState, useRef, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import * as Speech from 'expo-speech';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
+import { sendChatMessage } from '../../src/services/chatService';
 import type { ChatMessage } from '../../src/types';
 
 const INITIAL_MESSAGE: ChatMessage = {
@@ -39,6 +42,48 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MESSAGE]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // Voice input not available in Expo Go - show info alert
+  const handleVoicePress = () => {
+    Alert.alert(
+      'Voice Input',
+      'Voice input requires a development build. Text-to-speech is available - tap the speaker icon on any message to hear it read aloud.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  // Text-to-speech for AI responses (supported in Expo Go)
+  const speakMessage = async (text: string, messageId: string) => {
+    if (isSpeaking && speakingMessageId === messageId) {
+      Speech.stop();
+      setIsSpeaking(false);
+      setSpeakingMessageId(null);
+      return;
+    }
+
+    if (isSpeaking) {
+      Speech.stop();
+    }
+
+    setIsSpeaking(true);
+    setSpeakingMessageId(messageId);
+
+    Speech.speak(text, {
+      language: 'en-US',
+      pitch: 1.0,
+      rate: 0.9,
+      onDone: () => {
+        setIsSpeaking(false);
+        setSpeakingMessageId(null);
+      },
+      onError: () => {
+        setIsSpeaking(false);
+        setSpeakingMessageId(null);
+      },
+    });
+  };
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? colors.backgroundDark : colors.background },
@@ -68,24 +113,13 @@ export default function ChatScreen() {
     setInputText('');
     setIsLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses: Record<string, string> = {
-        'Submit a new request':
-          "I'd be happy to help you submit a new service request! What type of service do you need? We offer:\n\n• Plumbing\n• Electrical\n• AC/HVAC\n• Appliance repair\n• Cleaning\n• General maintenance",
-        'Track my order':
-          "I can help you track your service request. Looking at your account, you have one active request:\n\n📋 AC Repair - In Progress\n🏠 Villa 23, Palm Jumeirah\n👷 Technician: Ahmed Hassan\n📅 Scheduled: Today at 10:00 AM\n\nWould you like to track the technician's location?",
-        'What services do you offer?':
-          'AgentCare provides comprehensive maintenance services including:\n\n🔧 Plumbing - leaks, clogs, installations\n⚡ Electrical - wiring, fixtures, repairs\n❄️ AC/HVAC - maintenance, repairs, installations\n📺 Appliance Repair - all major brands\n🧹 Cleaning - regular and deep cleaning\n🏠 General Maintenance - painting, carpentry\n\nAll our technicians are certified and background-checked!',
-        'Talk to support':
-          "I'm here to help! If you need to speak with a human agent, I can connect you. Our support team is available:\n\n📞 Phone: +971 4 123 4567\n💬 Live Chat: Available 24/7\n📧 Email: support@agentcare.com\n\nWould you like me to transfer you to a live agent?",
-      };
+    try {
+      // Call the AI service
+      const response = await sendChatMessage(text.trim());
 
       const aiMessage: ChatMessage = {
         id: (Date.now() + 1).toString(),
-        content:
-          responses[text] ||
-          "Thank you for your message! I understand you need assistance. Could you please provide more details about what you're looking for? I can help you with:\n\n• Submitting service requests\n• Tracking existing requests\n• Information about our services\n• Connecting with support",
+        content: response.response,
         role: 'assistant',
         timestamp: new Date().toISOString(),
         agentName: 'Fatima',
@@ -93,8 +127,22 @@ export default function ChatScreen() {
       };
 
       setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      // Fallback to basic response on error
+      const fallbackMessage: ChatMessage = {
+        id: (Date.now() + 1).toString(),
+        content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment, or contact our support team for immediate assistance.",
+        role: 'assistant',
+        timestamp: new Date().toISOString(),
+        agentName: 'Fatima',
+        agentAvatar: 'F',
+      };
+
+      setMessages((prev) => [...prev, fallbackMessage]);
+      console.error('Chat error:', error);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   useEffect(() => {
@@ -105,6 +153,7 @@ export default function ChatScreen() {
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isUser = item.role === 'user';
+    const isCurrentlySpeaking = isSpeaking && speakingMessageId === item.id;
 
     return (
       <View style={[styles.messageContainer, isUser && styles.userMessageContainer]}>
@@ -121,9 +170,23 @@ export default function ChatScreen() {
             isUser ? styles.userBubble : [styles.assistantBubble, dynamicStyles.inputContainer],
           ]}
         >
-          {!isUser && <Text style={styles.agentName}>{item.agentName}</Text>}
-          <Text style={[styles.messageText, isUser && styles.userMessageText]}>{item.content}</Text>
-          <Text style={[styles.timestamp, isUser && styles.userTimestamp]}>
+          {!isUser && (
+            <View style={styles.messageHeader}>
+              <Text style={styles.agentName}>{item.agentName}</Text>
+              <TouchableOpacity
+                style={styles.speakerButton}
+                onPress={() => speakMessage(item.content, item.id)}
+              >
+                <Ionicons
+                  name={isCurrentlySpeaking ? 'stop-circle' : 'volume-high'}
+                  size={18}
+                  color={isCurrentlySpeaking ? colors.error : colors.primary}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+          <Text style={[styles.messageText, isUser ? styles.userMessageText : dynamicStyles.text]}>{item.content}</Text>
+          <Text style={[styles.timestamp, isUser ? styles.userTimestamp : dynamicStyles.textMuted]}>
             {new Date(item.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
           </Text>
         </View>
@@ -169,7 +232,7 @@ export default function ChatScreen() {
               style={[styles.suggestionChip, dynamicStyles.inputContainer]}
               onPress={() => sendMessage(suggestion)}
             >
-              <Text style={[styles.suggestionText, { color: colors.primary }]}>{suggestion}</Text>
+              <Text style={[styles.suggestionText, { color: isDark ? colors.primaryLight : colors.primary }]}>{suggestion}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -177,6 +240,19 @@ export default function ChatScreen() {
 
       {/* Input */}
       <View style={[styles.inputContainer, dynamicStyles.inputContainer]}>
+        {/* Microphone Button - shows info in Expo Go */}
+        <TouchableOpacity
+          style={[styles.voiceButton, styles.voiceButtonDisabled]}
+          onPress={handleVoicePress}
+          disabled={isLoading}
+        >
+          <Ionicons
+            name="mic"
+            size={22}
+            color={colors.textMuted}
+          />
+        </TouchableOpacity>
+
         <TextInput
           style={[styles.input, dynamicStyles.input]}
           placeholder="Type your message..."
@@ -241,11 +317,19 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 4,
     borderWidth: 1,
   },
+  messageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
   agentName: {
     fontSize: fontSize.xs,
     fontWeight: fontWeight.semibold,
     color: colors.primary,
-    marginBottom: 4,
+  },
+  speakerButton: {
+    padding: 4,
   },
   messageText: {
     fontSize: fontSize.md,
@@ -323,5 +407,19 @@ const styles = StyleSheet.create({
   },
   sendButtonDisabled: {
     opacity: 0.5,
+  },
+  voiceButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  voiceButtonDisabled: {
+    borderColor: colors.textMuted,
+    opacity: 0.6,
   },
 });

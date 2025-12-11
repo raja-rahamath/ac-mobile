@@ -1,43 +1,13 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, useColorScheme, RefreshControl } from 'react-native';
-import { useState, useCallback } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, useColorScheme, RefreshControl, ActivityIndicator } from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
+import { getServiceRequests } from '../../src/services/requestService';
 import type { ServiceRequest, ServiceStatus } from '../../src/types';
 
-const MOCK_REQUESTS: ServiceRequest[] = [
-  {
-    id: '1',
-    title: 'AC not cooling',
-    description: 'The air conditioner in the living room is not cooling properly',
-    category: 'hvac',
-    status: 'in_progress',
-    priority: 'high',
-    propertyAddress: 'Villa 23, Palm Jumeirah',
-    scheduledDate: '2024-01-15T10:00:00Z',
-    assignedTechnician: {
-      id: 't1',
-      name: 'Ahmed Hassan',
-      rating: 4.8,
-    },
-    createdAt: '2024-01-14T08:00:00Z',
-    updatedAt: '2024-01-14T12:00:00Z',
-  },
-  {
-    id: '2',
-    title: 'Leaking faucet',
-    description: 'Kitchen sink faucet is dripping',
-    category: 'plumbing',
-    status: 'assigned',
-    priority: 'medium',
-    propertyAddress: 'Apt 1204, Marina Tower',
-    scheduledDate: '2024-01-16T14:00:00Z',
-    createdAt: '2024-01-13T15:00:00Z',
-    updatedAt: '2024-01-13T16:00:00Z',
-  },
-];
-
-const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon: string }> = {
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
+  // Lowercase statuses (legacy)
   pending: { label: 'Pending', color: '#f59e0b', icon: 'time-outline' },
   confirmed: { label: 'Confirmed', color: '#3b82f6', icon: 'checkmark-circle-outline' },
   assigned: { label: 'Assigned', color: '#8b5cf6', icon: 'person-outline' },
@@ -45,6 +15,14 @@ const STATUS_CONFIG: Record<ServiceStatus, { label: string; color: string; icon:
   in_progress: { label: 'In Progress', color: '#10b981', icon: 'construct-outline' },
   completed: { label: 'Completed', color: '#22c55e', icon: 'checkmark-done-outline' },
   cancelled: { label: 'Cancelled', color: '#ef4444', icon: 'close-circle-outline' },
+  // Uppercase statuses (from API)
+  NEW: { label: 'New', color: '#f59e0b', icon: 'time-outline' },
+  ASSIGNED: { label: 'Assigned', color: '#8b5cf6', icon: 'person-outline' },
+  IN_PROGRESS: { label: 'In Progress', color: '#10b981', icon: 'construct-outline' },
+  ON_HOLD: { label: 'On Hold', color: '#6b7280', icon: 'pause-outline' },
+  COMPLETED: { label: 'Completed', color: '#22c55e', icon: 'checkmark-done-outline' },
+  CANCELLED: { label: 'Cancelled', color: '#ef4444', icon: 'close-circle-outline' },
+  CLOSED: { label: 'Closed', color: '#6b7280', icon: 'checkmark-done-outline' },
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -64,11 +42,34 @@ export default function RequestsScreen() {
   const isDark = colorScheme === 'dark';
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+  const [requests, setRequests] = useState<ServiceRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchRequests = useCallback(async () => {
+    try {
+      setError(null);
+      const response = await getServiceRequests(filter);
+      setRequests(response.data);
+    } catch (err) {
+      console.error('Error fetching requests:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load requests');
+      setRequests([]);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  }, [filter]);
+
+  useEffect(() => {
+    setIsLoading(true);
+    fetchRequests();
+  }, [fetchRequests]);
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+    fetchRequests();
+  }, [fetchRequests]);
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? colors.backgroundDark : colors.background },
@@ -80,14 +81,8 @@ export default function RequestsScreen() {
     },
   };
 
-  const filteredRequests = MOCK_REQUESTS.filter((req) => {
-    if (filter === 'active') return !['completed', 'cancelled'].includes(req.status);
-    if (filter === 'completed') return req.status === 'completed';
-    return true;
-  });
-
   const renderRequest = ({ item }: { item: ServiceRequest }) => {
-    const statusConfig = STATUS_CONFIG[item.status];
+    const statusConfig = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending;
     const categoryIcon = CATEGORY_ICONS[item.category] || 'construct';
 
     return (
@@ -101,8 +96,11 @@ export default function RequestsScreen() {
           </View>
           <View style={styles.requestInfo}>
             <Text style={[styles.requestTitle, dynamicStyles.text]}>{item.title}</Text>
+            {item.requestNo && (
+              <Text style={[styles.requestNumber, { color: colors.primary }]}>{item.requestNo}</Text>
+            )}
             <Text style={[styles.requestAddress, dynamicStyles.textMuted]} numberOfLines={1}>
-              {item.propertyAddress}
+              {item.propertyAddress || 'No address specified'}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + '20' }]}>
@@ -171,22 +169,36 @@ export default function RequestsScreen() {
         ))}
       </View>
 
-      <FlatList
-        data={filteredRequests}
-        renderItem={renderRequest}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContainer}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="clipboard-outline" size={64} color={isDark ? colors.textMutedDark : colors.textMuted} />
-            <Text style={[styles.emptyTitle, dynamicStyles.text]}>No requests found</Text>
-            <Text style={[styles.emptySubtitle, dynamicStyles.textMuted]}>
-              Your service requests will appear here
-            </Text>
-          </View>
-        }
-      />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading requests...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={requests}
+          renderItem={renderRequest}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContainer}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="clipboard-outline" size={64} color={isDark ? colors.textMutedDark : colors.textMuted} />
+              <Text style={[styles.emptyTitle, dynamicStyles.text]}>
+                {error ? 'Unable to load requests' : 'No requests found'}
+              </Text>
+              <Text style={[styles.emptySubtitle, dynamicStyles.textMuted]}>
+                {error || 'Your service requests will appear here'}
+              </Text>
+              {error && (
+                <TouchableOpacity style={styles.retryButton} onPress={onRefresh}>
+                  <Text style={styles.retryButtonText}>Try Again</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          }
+        />
+      )}
 
       {/* FAB */}
       <TouchableOpacity style={styles.fab} onPress={() => router.push('/request/new')}>
@@ -224,6 +236,16 @@ const styles = StyleSheet.create({
   listContainer: {
     padding: spacing.lg,
     paddingBottom: 100,
+    flexGrow: 1,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  loadingText: {
+    fontSize: fontSize.md,
   },
   requestCard: {
     padding: spacing.lg,
@@ -249,6 +271,11 @@ const styles = StyleSheet.create({
   requestTitle: {
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
+  },
+  requestNumber: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    marginTop: 2,
   },
   requestAddress: {
     fontSize: fontSize.sm,
@@ -313,6 +340,8 @@ const styles = StyleSheet.create({
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
+    flex: 1,
+    justifyContent: 'center',
   },
   emptyTitle: {
     fontSize: fontSize.lg,
@@ -322,6 +351,20 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: fontSize.sm,
     marginTop: spacing.xs,
+    textAlign: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  retryButton: {
+    marginTop: spacing.lg,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.primary,
+    borderRadius: borderRadius.md,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
   },
   fab: {
     position: 'absolute',
