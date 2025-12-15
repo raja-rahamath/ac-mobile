@@ -17,7 +17,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize } from '../../src/constants/theme';
-import { API_CONFIG, API_ENDPOINTS } from '../../src/constants/api';
+import { API_CONFIG, ENDPOINTS } from '../../src/constants/api';
 
 type ScreenState = 'input' | 'success';
 
@@ -83,7 +83,7 @@ export default function ResetPasswordScreen() {
     setIsLoading(true);
     try {
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}${API_ENDPOINTS.RESET_PASSWORD}`,
+        `${API_CONFIG.BASE_URL}${ENDPOINTS.RESET_PASSWORD}`,
         {
           method: 'POST',
           headers: {

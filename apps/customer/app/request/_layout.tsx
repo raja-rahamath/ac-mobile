@@ -21,7 +21,15 @@ export default function RequestLayout() {
       <Stack.Screen
         name="new"
         options={{
+          title: 'New Request',
+          presentation: 'modal',
           headerShown: false,
+        }}
+      />
+      <Stack.Screen
+        name="[id]"
+        options={{
+          title: 'Request Details',
         }}
       />
     </Stack>

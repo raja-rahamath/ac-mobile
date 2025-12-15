@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { useLanguage, LanguageCode } from '../../src/contexts/LanguageContext';
 import { getMyProperties } from '../../src/services/propertyService';
 
 // Coming Soon Modal Component
@@ -49,16 +50,22 @@ function ComingSoonModal({ visible, title, onClose, isDark }: ComingSoonModalPro
 // Language Selection Modal Component
 interface LanguageModalProps {
   visible: boolean;
-  selectedLanguage: string;
-  onSelect: (language: string) => void;
+  selectedLanguage: LanguageCode;
+  onSelect: (language: LanguageCode) => void;
   onClose: () => void;
   isDark: boolean;
+  translations: {
+    selectLanguage: string;
+    english: string;
+    arabic: string;
+  };
+  doneText: string;
 }
 
-function LanguageModal({ visible, selectedLanguage, onSelect, onClose, isDark }: LanguageModalProps) {
-  const languages = [
-    { code: 'en', label: 'English' },
-    { code: 'ar', label: 'العربية (Arabic)' },
+function LanguageModal({ visible, selectedLanguage, onSelect, onClose, isDark, translations, doneText }: LanguageModalProps) {
+  const languages: { code: LanguageCode; label: string }[] = [
+    { code: 'en', label: translations.english },
+    { code: 'ar', label: translations.arabic },
   ];
 
   return (
@@ -71,7 +78,7 @@ function LanguageModal({ visible, selectedLanguage, onSelect, onClose, isDark }:
       <View style={modalStyles.overlay}>
         <View style={[modalStyles.container, { backgroundColor: isDark ? colors.cardDark : colors.card }]}>
           <Text style={[modalStyles.title, { color: isDark ? colors.textDark : colors.text }]}>
-            Select Language
+            {translations.selectLanguage}
           </Text>
           <View style={modalStyles.languageList}>
             {languages.map((lang) => (
@@ -102,7 +109,7 @@ function LanguageModal({ visible, selectedLanguage, onSelect, onClose, isDark }:
             style={({ pressed }) => [modalStyles.button, pressed && modalStyles.buttonPressed]}
             onPress={onClose}
           >
-            <Text style={modalStyles.buttonText}>Done</Text>
+            <Text style={modalStyles.buttonText}>{doneText}</Text>
           </Pressable>
         </View>
       </View>
@@ -322,6 +329,7 @@ function MenuItem({
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, logout } = useAuth();
+  const { language, setLanguage, t, languageLabel } = useLanguage();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
@@ -332,7 +340,6 @@ export default function ProfileScreen() {
   // Modal states
   const [comingSoonModal, setComingSoonModal] = useState({ visible: false, title: '' });
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [signoutModalVisible, setSignoutModalVisible] = useState(false);
 
   // Fetch property count when screen focuses
@@ -406,8 +413,12 @@ export default function ProfileScreen() {
     setLanguageModalVisible(true);
   };
 
-  const handleLanguageSelect = (lang: string) => {
-    setSelectedLanguage(lang);
+  const handleLanguageSelect = async (lang: LanguageCode) => {
+    try {
+      await setLanguage(lang);
+    } catch (error) {
+      console.error('Failed to change language:', error);
+    }
   };
 
   const handleHelpCenter = () => {
@@ -475,30 +486,30 @@ export default function ProfileScreen() {
 
       {/* Account Section */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>ACCOUNT</Text>
+        <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>{t.menu.account}</Text>
         <View style={[styles.menuCard, dynamicStyles.card]}>
           <MenuItem
             icon="person-outline"
-            label="Personal Information"
+            label={t.menu.personalInformation}
             isDark={isDark}
             onPress={handlePersonalInfo}
           />
           <MenuItem
             icon="location-outline"
-            label="My Properties"
-            value={propertyCount !== null ? `${propertyCount} ${propertyCount === 1 ? 'property' : 'properties'}` : 'Loading...'}
+            label={t.menu.myProperties}
+            value={propertyCount !== null ? `${propertyCount} ${propertyCount === 1 ? t.properties.property : t.properties.properties}` : t.common.loading}
             isDark={isDark}
             onPress={handleMyProperties}
           />
           <MenuItem
             icon="card-outline"
-            label="Payment Methods"
+            label={t.menu.paymentMethods}
             isDark={isDark}
             onPress={handlePaymentMethods}
           />
           <MenuItem
             icon="receipt-outline"
-            label="Billing History"
+            label={t.menu.billingHistory}
             isDark={isDark}
             onPress={handleBillingHistory}
           />
@@ -507,11 +518,11 @@ export default function ProfileScreen() {
 
       {/* Preferences Section */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>PREFERENCES</Text>
+        <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>{t.menu.preferences}</Text>
         <View style={[styles.menuCard, dynamicStyles.card]}>
           <MenuItem
             icon="notifications-outline"
-            label="Push Notifications"
+            label={t.menu.pushNotifications}
             showSwitch
             switchValue={notificationsEnabled}
             onSwitchChange={setNotificationsEnabled}
@@ -519,7 +530,7 @@ export default function ProfileScreen() {
           />
           <MenuItem
             icon="moon-outline"
-            label="Dark Mode"
+            label={t.menu.darkMode}
             showSwitch
             switchValue={darkModeEnabled}
             onSwitchChange={setDarkModeEnabled}
@@ -527,8 +538,8 @@ export default function ProfileScreen() {
           />
           <MenuItem
             icon="language-outline"
-            label="Language"
-            value="English"
+            label={t.menu.language}
+            value={languageLabel}
             isDark={isDark}
             onPress={handleLanguage}
           />
@@ -537,29 +548,29 @@ export default function ProfileScreen() {
 
       {/* Support Section */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>SUPPORT</Text>
+        <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>{t.menu.support}</Text>
         <View style={[styles.menuCard, dynamicStyles.card]}>
           <MenuItem
             icon="help-circle-outline"
-            label="Help Center"
+            label={t.menu.helpCenter}
             isDark={isDark}
             onPress={handleHelpCenter}
           />
           <MenuItem
             icon="chatbubble-outline"
-            label="Contact Support"
+            label={t.menu.contactSupport}
             isDark={isDark}
             onPress={handleContactSupport}
           />
           <MenuItem
             icon="document-text-outline"
-            label="Terms of Service"
+            label={t.menu.termsOfService}
             isDark={isDark}
             onPress={handleTerms}
           />
           <MenuItem
             icon="shield-outline"
-            label="Privacy Policy"
+            label={t.menu.privacyPolicy}
             isDark={isDark}
             onPress={handlePrivacy}
           />
@@ -569,7 +580,7 @@ export default function ProfileScreen() {
       {/* Danger Zone */}
       <View style={styles.section}>
         <View style={[styles.menuCard, dynamicStyles.card]}>
-          <MenuItem icon="log-out-outline" label="Sign Out" danger onPress={handleLogout} isDark={isDark} />
+          <MenuItem icon="log-out-outline" label={t.menu.signOut} danger onPress={handleLogout} isDark={isDark} />
         </View>
       </View>
 
@@ -588,10 +599,12 @@ export default function ProfileScreen() {
 
       <LanguageModal
         visible={languageModalVisible}
-        selectedLanguage={selectedLanguage}
+        selectedLanguage={language}
         onSelect={handleLanguageSelect}
         onClose={() => setLanguageModalVisible(false)}
         isDark={isDark}
+        translations={t.languages}
+        doneText={t.common.done}
       />
 
       <SignoutModal

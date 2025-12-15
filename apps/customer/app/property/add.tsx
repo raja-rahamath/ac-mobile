@@ -32,7 +32,7 @@ const OWNERSHIP_OPTIONS: OwnershipOption[] = [
 
 export default function AddPropertyScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ returnTo?: string }>();
+  const params = useLocalSearchParams<{ returnTo?: string; category?: string }>();
 
   const [flat, setFlat] = useState('');
   const [building, setBuilding] = useState('');
@@ -136,7 +136,9 @@ export default function AddPropertyScreen() {
             onPress: () => {
               // Navigate based on where user came from
               if (params.returnTo === 'newRequest') {
-                router.replace('/request/new');
+                // Pass category back to preserve selection
+                const categoryParam = params.category ? `?category=${params.category}` : '';
+                router.replace(`/request/new${categoryParam}`);
               } else {
                 router.back();
               }
@@ -150,7 +152,9 @@ export default function AddPropertyScreen() {
       if (Platform.OS === 'web') {
         setTimeout(() => {
           if (params.returnTo === 'newRequest') {
-            router.replace('/request/new');
+            // Pass category back to preserve selection
+            const categoryParam = params.category ? `?category=${params.category}` : '';
+            router.replace(`/request/new${categoryParam}`);
           } else {
             router.back();
           }
@@ -237,6 +241,7 @@ export default function AddPropertyScreen() {
                 setBuilding(text);
                 if (errors.building) setErrors(prev => ({ ...prev, building: '' }));
               }}
+              keyboardType="number-pad"
             />
             {errors.building && <Text style={styles.errorText}>{errors.building}</Text>}
           </View>
@@ -253,6 +258,7 @@ export default function AddPropertyScreen() {
                 setRoad(text);
                 if (errors.road) setErrors(prev => ({ ...prev, road: '' }));
               }}
+              keyboardType="number-pad"
             />
             {errors.road && <Text style={styles.errorText}>{errors.road}</Text>}
           </View>
@@ -269,6 +275,7 @@ export default function AddPropertyScreen() {
                 setBlock(text);
                 if (errors.block) setErrors(prev => ({ ...prev, block: '' }));
               }}
+              keyboardType="number-pad"
             />
             {errors.block && <Text style={styles.errorText}>{errors.block}</Text>}
           </View>
@@ -302,11 +309,11 @@ export default function AddPropertyScreen() {
             animationType="slide"
             onRequestClose={closeAreaPicker}
           >
-            <View style={styles.modalOverlay}>
-              <View style={styles.pickerContainer}>
+            <Pressable style={styles.modalOverlay} onPress={closeAreaPicker}>
+              <Pressable style={styles.pickerContainer} onPress={(e) => e.stopPropagation()}>
                 <View style={styles.pickerHeader}>
                   <Text style={styles.pickerTitle}>Select Area</Text>
-                  <TouchableOpacity onPress={closeAreaPicker}>
+                  <TouchableOpacity onPress={closeAreaPicker} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                     <Ionicons name="close" size={24} color="#fff" />
                   </TouchableOpacity>
                 </View>
@@ -321,9 +328,10 @@ export default function AddPropertyScreen() {
                     onChangeText={setAreaSearchQuery}
                     autoCorrect={false}
                     autoCapitalize="none"
+                    autoFocus={true}
                   />
                   {areaSearchQuery.length > 0 && (
-                    <TouchableOpacity onPress={() => setAreaSearchQuery('')}>
+                    <TouchableOpacity onPress={() => setAreaSearchQuery('')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                       <Ionicons name="close-circle" size={18} color="#666" />
                     </TouchableOpacity>
                   )}
@@ -359,13 +367,24 @@ export default function AddPropertyScreen() {
                     </TouchableOpacity>
                   )}
                   ListEmptyComponent={
-                    <Text style={styles.emptyText}>
-                      {areaSearchQuery ? 'No areas match your search' : 'No areas available'}
-                    </Text>
+                    <View style={styles.emptyContainer}>
+                      <Ionicons name="search-outline" size={48} color="#666" />
+                      <Text style={styles.emptyText}>
+                        {areaSearchQuery ? `No areas found for "${areaSearchQuery}"` : 'No areas available'}
+                      </Text>
+                      {areaSearchQuery.length > 0 && (
+                        <TouchableOpacity
+                          style={styles.clearSearchButton}
+                          onPress={() => setAreaSearchQuery('')}
+                        >
+                          <Text style={styles.clearSearchText}>Clear Search</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
                   }
                 />
-              </View>
-            </View>
+              </Pressable>
+            </Pressable>
           </Modal>
 
           {/* Ownership Type */}
@@ -583,11 +602,28 @@ const styles = StyleSheet.create({
     color: '#8B5CF6',
     fontWeight: '600',
   },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    gap: 12,
+  },
   emptyText: {
     color: '#666',
     fontSize: 14,
     textAlign: 'center',
-    padding: 24,
+  },
+  clearSearchButton: {
+    marginTop: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+  },
+  clearSearchText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   searchContainer: {
     flexDirection: 'row',

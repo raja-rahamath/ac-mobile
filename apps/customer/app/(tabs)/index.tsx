@@ -4,16 +4,18 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
 import { useAuth } from '../../src/contexts/AuthContext';
+import { useLanguage } from '../../src/contexts/LanguageContext';
 import { getServiceRequests } from '../../src/services/requestService';
+import { getServiceTypes, ServiceType } from '../../src/services/serviceTypesService';
 import type { ServiceRequest } from '../../src/types';
 
-const SERVICE_CATEGORIES = [
-  { id: 'plumbing', label: 'Plumbing', icon: 'water' as const, color: '#3b82f6' },
-  { id: 'electrical', label: 'Electrical', icon: 'flash' as const, color: '#f59e0b' },
-  { id: 'hvac', label: 'AC / HVAC', icon: 'snow' as const, color: '#06b6d4' },
-  { id: 'appliance', label: 'Appliances', icon: 'tv' as const, color: '#8b5cf6' },
-  { id: 'cleaning', label: 'Cleaning', icon: 'sparkles' as const, color: '#10b981' },
-  { id: 'general', label: 'General', icon: 'construct' as const, color: '#64748b' },
+// Fallback service types for when API is loading
+const FALLBACK_SERVICE_CATEGORIES = [
+  { id: 'plumbing', name: 'Plumbing', nameAr: 'السباكة', icon: 'water', color: '#3b82f6' },
+  { id: 'electrical', name: 'Electrical', nameAr: 'الكهرباء', icon: 'flash', color: '#f59e0b' },
+  { id: 'hvac', name: 'AC Maintenance', nameAr: 'صيانة المكيفات', icon: 'snow', color: '#06b6d4' },
+  { id: 'cleaning', name: 'Cleaning', nameAr: 'التنظيف', icon: 'sparkles', color: '#10b981' },
+  { id: 'general', name: 'General Maintenance', nameAr: 'الصيانة العامة', icon: 'construct', color: '#64748b' },
 ];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -49,9 +51,31 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const { user } = useAuth();
+  const { language } = useLanguage();
 
   const [activeRequests, setActiveRequests] = useState<ServiceRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [serviceCategories, setServiceCategories] = useState<ServiceType[]>([]);
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+
+  // Fetch service types on mount
+  useEffect(() => {
+    fetchServiceTypes();
+  }, []);
+
+  const fetchServiceTypes = async () => {
+    try {
+      setIsLoadingServices(true);
+      const types = await getServiceTypes();
+      setServiceCategories(types);
+    } catch (err) {
+      console.error('Error fetching service types:', err);
+      // Fall back to hardcoded values
+      setServiceCategories(FALLBACK_SERVICE_CATEGORIES as unknown as ServiceType[]);
+    } finally {
+      setIsLoadingServices(false);
+    }
+  };
 
   // Fetch active requests when screen comes into focus
   useFocusEffect(
@@ -174,20 +198,29 @@ export default function HomeScreen() {
       {/* Service Categories */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>Services</Text>
-        <View style={styles.categoryGrid}>
-          {SERVICE_CATEGORIES.map((category) => (
-            <TouchableOpacity
-              key={category.id}
-              style={[styles.categoryCard, dynamicStyles.card]}
-              onPress={() => router.push({ pathname: '/request/new', params: { category: category.id } })}
-            >
-              <View style={[styles.categoryIconContainer, { backgroundColor: category.color + '20' }]}>
-                <Ionicons name={category.icon} size={24} color={category.color} />
-              </View>
-              <Text style={[styles.categoryLabel, dynamicStyles.text]}>{category.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        {isLoadingServices ? (
+          <View style={[styles.loadingContainer, dynamicStyles.card]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading services...</Text>
+          </View>
+        ) : (
+          <View style={styles.categoryGrid}>
+            {serviceCategories.map((category) => (
+              <TouchableOpacity
+                key={category.id}
+                style={[styles.categoryCard, dynamicStyles.card]}
+                onPress={() => router.push({ pathname: '/request/new', params: { category: category.id, categoryName: category.name } })}
+              >
+                <View style={[styles.categoryIconContainer, { backgroundColor: category.color + '20' }]}>
+                  <Ionicons name={category.icon as any} size={24} color={category.color} />
+                </View>
+                <Text style={[styles.categoryLabel, dynamicStyles.text]}>
+                  {language === 'ar' && category.nameAr ? category.nameAr : category.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
 
       {/* Active Requests */}

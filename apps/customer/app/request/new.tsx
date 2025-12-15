@@ -12,6 +12,7 @@ import {
   Modal,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -192,7 +193,21 @@ export default function NewRequestScreen() {
   }
 
   return (
-    <ScrollView style={[styles.container, dynamicStyles.container]}>
+    <SafeAreaView style={[styles.container, dynamicStyles.container]} edges={['top']}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={isDark ? colors.textDark : colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, dynamicStyles.text]}>New Service Request</Text>
+        <View style={styles.headerSpacer} />
+      </View>
+
+      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
       {/* No Property Alert Modal */}
       <Modal
         visible={showNoPropertyAlert}
@@ -223,7 +238,8 @@ export default function NewRequestScreen() {
                 style={[styles.modalButton, styles.modalButtonPrimary]}
                 onPress={() => {
                   setShowNoPropertyAlert(false);
-                  router.push('/property/add?returnTo=newRequest');
+                  // Pass category so it's retained when returning
+                  router.push(`/property/add?returnTo=newRequest&category=${category}`);
                 }}
               >
                 <Text style={styles.modalButtonPrimaryText}>Add Property</Text>
@@ -480,12 +496,41 @@ export default function NewRequestScreen() {
       </View>
 
       <View style={{ height: spacing.xxl }} />
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
+  },
+  scrollContent: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

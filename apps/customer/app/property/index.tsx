@@ -149,7 +149,7 @@ export default function PropertiesScreen() {
                   {property.type && (
                     <View style={styles.detailItem}>
                       <Ionicons name="business-outline" size={14} color={isDark ? colors.textMutedDark : colors.textMuted} />
-                      <Text style={[styles.detailText, dynamicStyles.textMuted]}>{property.type}</Text>
+                      <Text style={[styles.detailText, dynamicStyles.textMuted]}>{property.type?.name}</Text>
                     </View>
                   )}
                   {property.ownershipType && (

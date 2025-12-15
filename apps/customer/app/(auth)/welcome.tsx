@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -13,13 +13,16 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, spacing, borderRadius, fontSize } from '../../src/constants/theme';
+import { useLanguage } from '../../src/contexts/LanguageContext';
+import LanguageModal from '../../src/components/LanguageModal';
 
 const { width } = Dimensions.get('window');
 
-const TRUST_STATS = [
-  { value: '50K+', label: 'Happy Customers' },
-  { value: '4.8', label: 'App Rating', icon: 'star' },
-  { value: '2K+', label: 'Verified Pros' },
+// Trust stats - labels will be translated dynamically
+const TRUST_STATS_KEYS = [
+  { value: '50K+', key: 'happyCustomers' as const },
+  { value: '4.8', key: 'appRating' as const, icon: 'star' },
+  { value: '2K+', key: 'verifiedPros' as const },
 ];
 
 const SERVICE_ICONS = [
@@ -36,6 +39,8 @@ export default function WelcomeScreen() {
   const isDark = colorScheme === 'dark';
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
+  const { language, setLanguage, t } = useLanguage();
+  const [showLanguageModal, setShowLanguageModal] = useState(false);
 
   useEffect(() => {
     Animated.parallel([
@@ -66,6 +71,17 @@ export default function WelcomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Language Selector Button */}
+      <TouchableOpacity
+        style={styles.languageButton}
+        onPress={() => setShowLanguageModal(true)}
+      >
+        <Ionicons name="globe-outline" size={20} color={colors.white} />
+        <Text style={styles.languageButtonText}>
+          {language === 'ar' ? 'العربية' : 'EN'}
+        </Text>
+      </TouchableOpacity>
+
       {/* Background Gradient */}
       <LinearGradient
         colors={isDark ? ['#1a1a2e', '#16213e'] : ['#667eea', '#764ba2']}
@@ -77,11 +93,11 @@ export default function WelcomeScreen() {
         <View style={styles.floatingIcons}>
           {SERVICE_ICONS.slice(0, 4).map((item, index) => {
             // Position icons in corners and edges
-            const positions = [
+            const positions: any[] = [
               { left: '8%', top: '15%' },   // top-left
-              { right: '8%', top: '12%' },  // top-right
+              { right: '8%', top: '35%' },  // moved down to avoid language button
               { left: '5%', top: '45%' },   // mid-left
-              { right: '5%', top: '40%' },  // mid-right
+              { right: '5%', top: '60%' },  // mid-right - moved down
             ];
             return (
               <Animated.View
@@ -112,7 +128,7 @@ export default function WelcomeScreen() {
             <Ionicons name="home" size={40} color={colors.white} />
           </View>
           <Text style={styles.brandName}>AgentCare</Text>
-          <Text style={styles.tagline}>Home Services at Your Fingertips</Text>
+          <Text style={styles.tagline}>{t.welcome.tagline}</Text>
         </Animated.View>
       </LinearGradient>
 
@@ -120,7 +136,7 @@ export default function WelcomeScreen() {
       <View style={styles.content}>
         {/* Trust Stats */}
         <View style={styles.trustStats}>
-          {TRUST_STATS.map((stat, index) => (
+          {TRUST_STATS_KEYS.map((stat, index) => (
             <View key={index} style={styles.statItem}>
               <View style={styles.statValueRow}>
                 <Text style={styles.statValue}>{stat.value}</Text>
@@ -128,7 +144,7 @@ export default function WelcomeScreen() {
                   <Ionicons name={stat.icon as any} size={16} color="#F59E0B" />
                 )}
               </View>
-              <Text style={styles.statLabel}>{stat.label}</Text>
+              <Text style={styles.statLabel}>{t.welcome.stats[stat.key]}</Text>
             </View>
           ))}
         </View>
@@ -141,7 +157,7 @@ export default function WelcomeScreen() {
           >
             <Ionicons name="logo-apple" size={22} color={colors.white} />
             <Text style={[styles.socialButtonText, styles.appleButtonText]}>
-              Continue with Apple
+              {t.welcome.continueWithApple}
             </Text>
           </TouchableOpacity>
 
@@ -151,7 +167,7 @@ export default function WelcomeScreen() {
           >
             <Ionicons name="logo-google" size={20} color="#DB4437" />
             <Text style={[styles.socialButtonText, styles.googleButtonText]}>
-              Continue with Google
+              {t.welcome.continueWithGoogle}
             </Text>
           </TouchableOpacity>
         </View>
@@ -159,7 +175,7 @@ export default function WelcomeScreen() {
         {/* Divider */}
         <View style={styles.divider}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
+          <Text style={styles.dividerText}>{t.welcome.or}</Text>
           <View style={styles.dividerLine} />
         </View>
 
@@ -169,7 +185,7 @@ export default function WelcomeScreen() {
           onPress={() => router.push('/(auth)/login')}
         >
           <Ionicons name="mail-outline" size={20} color={colors.white} />
-          <Text style={styles.emailButtonText}>Sign in with Email</Text>
+          <Text style={styles.emailButtonText}>{t.welcome.signInWithEmail}</Text>
         </TouchableOpacity>
 
         {/* Create Account Link */}
@@ -178,7 +194,7 @@ export default function WelcomeScreen() {
           onPress={() => router.push('/(auth)/register')}
         >
           <Text style={styles.createAccountText}>
-            New to AgentCare? <Text style={styles.createAccountLink}>Create Account</Text>
+            {t.welcome.newToAgentCare} <Text style={styles.createAccountLink}>{t.welcome.createAccount}</Text>
           </Text>
         </TouchableOpacity>
 
@@ -189,22 +205,28 @@ export default function WelcomeScreen() {
             size={18}
             color={isDark ? colors.textMutedDark : colors.textMuted}
           />
-          <Text style={styles.guestText}>Browse as Guest</Text>
+          <Text style={styles.guestText}>{t.welcome.browseAsGuest}</Text>
         </TouchableOpacity>
 
         {/* Footer */}
         <View style={styles.footer}>
           <View style={styles.securityBadge}>
             <Ionicons name="shield-checkmark" size={14} color="#10B981" />
-            <Text style={styles.securityText}>256-bit SSL Encrypted</Text>
+            <Text style={styles.securityText}>{t.welcome.sslEncrypted}</Text>
           </View>
           <Text style={styles.termsText}>
-            By continuing, you agree to our{' '}
-            <Text style={styles.termsLink}>Terms</Text> &{' '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
+            {t.welcome.termsAgreement}{' '}
+            <Text style={styles.termsLink}>{t.welcome.terms}</Text> {t.welcome.and}{' '}
+            <Text style={styles.termsLink}>{t.welcome.privacyPolicy}</Text>
           </Text>
         </View>
       </View>
+
+      {/* Language Modal */}
+      <LanguageModal
+        visible={showLanguageModal}
+        onClose={() => setShowLanguageModal(false)}
+      />
     </View>
   );
 }
@@ -214,6 +236,26 @@ const createStyles = (isDark: boolean) =>
     container: {
       flex: 1,
       backgroundColor: isDark ? colors.backgroundDark : colors.background,
+    },
+    languageButton: {
+      position: 'absolute',
+      top: Platform.OS === 'ios' ? 50 : 30,
+      right: spacing.lg,
+      zIndex: 100,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(0,0,0,0.4)',
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: borderRadius.full,
+      gap: spacing.xs,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.2)',
+    },
+    languageButtonText: {
+      color: colors.white,
+      fontSize: fontSize.sm,
+      fontWeight: '600',
     },
     headerGradient: {
       height: '38%',

@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useColorScheme, ActivityIndicator, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthProvider, useAuth } from '../src/contexts/AuthContext';
+import { LanguageProvider } from '../src/contexts/LanguageContext';
 import { colors } from '../src/constants/theme';
 
 const ONBOARDING_KEY = '@agentcare_onboarding_complete';
@@ -73,19 +74,9 @@ function RootLayoutNav() {
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen
-          name="request/new"
-          options={{
-            title: 'New Request',
-            presentation: 'modal',
-          }}
-        />
-        <Stack.Screen
-          name="request/[id]"
-          options={{
-            title: 'Request Details',
-          }}
-        />
+        <Stack.Screen name="profile/edit" options={{ title: 'Edit Profile' }} />
+        <Stack.Screen name="property" options={{ headerShown: false }} />
+        <Stack.Screen name="request" options={{ headerShown: false }} />
         <Stack.Screen
           name="track/[id]"
           options={{
@@ -99,8 +90,10 @@ function RootLayoutNav() {
 
 export default function RootLayout() {
   return (
-    <AuthProvider>
-      <RootLayoutNav />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <RootLayoutNav />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

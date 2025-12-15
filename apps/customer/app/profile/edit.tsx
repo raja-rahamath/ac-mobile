@@ -35,7 +35,7 @@ interface FormErrors {
 
 export default function EditProfileScreen() {
   const router = useRouter();
-  const { user, refreshUser, token } = useAuth();
+  const { user, accessToken } = useAuth();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
@@ -130,7 +130,7 @@ export default function EditProfileScreen() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({
           firstName: formData.firstName.trim(),
@@ -142,10 +142,6 @@ export default function EditProfileScreen() {
       const data = await response.json();
 
       if (data.success) {
-        // Refresh user data
-        if (refreshUser) {
-          await refreshUser();
-        }
         Alert.alert('Success', 'Your profile has been updated', [
           { text: 'OK', onPress: () => router.back() },
         ]);
