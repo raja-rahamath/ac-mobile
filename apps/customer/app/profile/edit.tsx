@@ -174,13 +174,26 @@ export default function EditProfileScreen() {
   const styles = createStyles(isDark);
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           headerShown: false,
           title: '',
         }}
       />
+
+      {/* Fixed Header */}
+      <View style={styles.fixedHeader}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={handleBack}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={isDark ? colors.textDark : colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Edit Profile</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -191,11 +204,6 @@ export default function EditProfileScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Back Button */}
-          <TouchableOpacity style={styles.backButton} onPress={handleBack}>
-            <Ionicons name="arrow-back" size={24} color={isDark ? colors.textDark : colors.text} />
-          </TouchableOpacity>
-
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.iconContainer}>
@@ -313,6 +321,14 @@ const createStyles = (isDark: boolean) =>
       padding: spacing.lg,
       paddingBottom: spacing.xxl,
     },
+    fixedHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: spacing.lg,
+      paddingVertical: spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: isDark ? colors.borderDark : colors.border,
+    },
     backButton: {
       width: 40,
       height: 40,
@@ -320,7 +336,16 @@ const createStyles = (isDark: boolean) =>
       backgroundColor: isDark ? colors.cardDark : colors.card,
       justifyContent: 'center',
       alignItems: 'center',
-      marginBottom: spacing.lg,
+    },
+    headerTitle: {
+      flex: 1,
+      fontSize: fontSize.lg,
+      fontWeight: '600',
+      color: isDark ? colors.textDark : colors.text,
+      textAlign: 'center',
+    },
+    headerSpacer: {
+      width: 40,
     },
     header: {
       alignItems: 'center',

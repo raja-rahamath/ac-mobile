@@ -1,6 +1,6 @@
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, useColorScheme, RefreshControl, ActivityIndicator } from 'react-native';
 import { useState, useCallback, useEffect } from 'react';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
 import { getServiceRequests } from '../../src/services/requestService';
@@ -61,10 +61,13 @@ export default function RequestsScreen() {
     }
   }, [filter]);
 
-  useEffect(() => {
-    setIsLoading(true);
-    fetchRequests();
-  }, [fetchRequests]);
+  // Refresh when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      setIsLoading(true);
+      fetchRequests();
+    }, [fetchRequests])
+  );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);

@@ -1,9 +1,9 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, Linking, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, Linking, ActivityIndicator, Alert } from 'react-native';
 import { useState, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
-import { getServiceRequestById } from '../../src/services/requestService';
+import { getServiceRequestById, cancelServiceRequest } from '../../src/services/requestService';
 import type { ServiceRequest } from '../../src/types';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
@@ -57,6 +57,7 @@ export default function RequestDetailScreen() {
   const [request, setRequest] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? colors.backgroundDark : colors.background },
@@ -93,6 +94,51 @@ export default function RequestDetailScreen() {
     if (phone) {
       Linking.openURL(`tel:${phone}`);
     }
+  };
+
+  const handleCancel = () => {
+    // Check if request can be cancelled by customer
+    if (request.status !== 'NEW') {
+      Alert.alert(
+        'Cannot Cancel',
+        'This request is already being processed. Please contact customer care to cancel.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Cancel Request',
+      'Are you sure you want to cancel this service request?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsCancelling(true);
+              await cancelServiceRequest(request.id);
+              Alert.alert('Success', 'Your request has been cancelled.', [
+                { text: 'OK', onPress: () => router.back() },
+              ]);
+            } catch (err) {
+              Alert.alert(
+                'Error',
+                err instanceof Error ? err.message : 'Failed to cancel request'
+              );
+            } finally {
+              setIsCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleContactSupport = () => {
+    // You can replace this with your actual support number
+    Linking.openURL('tel:+97317000000');
   };
 
   if (isLoading) {
@@ -274,10 +320,26 @@ export default function RequestDetailScreen() {
         </View>
       )}
 
-      {/* Cancel Button */}
-      {['pending', 'confirmed', 'assigned', 'NEW', 'ASSIGNED'].includes(request.status) && (
-        <TouchableOpacity style={styles.cancelButton}>
-          <Text style={styles.cancelButtonText}>Cancel Request</Text>
+      {/* Cancel Button - only for NEW status */}
+      {request.status === 'NEW' && (
+        <TouchableOpacity
+          style={[styles.cancelButton, isCancelling && styles.cancelButtonDisabled]}
+          onPress={handleCancel}
+          disabled={isCancelling}
+        >
+          {isCancelling ? (
+            <ActivityIndicator color={colors.error} />
+          ) : (
+            <Text style={styles.cancelButtonText}>Cancel Request</Text>
+          )}
+        </TouchableOpacity>
+      )}
+
+      {/* Contact Support - for other active statuses */}
+      {['ASSIGNED', 'IN_PROGRESS', 'ON_HOLD', 'assigned', 'in_progress', 'en_route', 'pending', 'confirmed'].includes(request.status) && (
+        <TouchableOpacity style={styles.contactSupportButton} onPress={handleContactSupport}>
+          <Ionicons name="call-outline" size={20} color={colors.primary} />
+          <Text style={styles.contactSupportText}>Contact Support to Cancel</Text>
         </TouchableOpacity>
       )}
 
@@ -439,8 +501,27 @@ const styles = StyleSheet.create({
     borderColor: colors.error,
     alignItems: 'center',
   },
+  cancelButtonDisabled: {
+    opacity: 0.6,
+  },
   cancelButtonText: {
     color: colors.error,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+  },
+  contactSupportButton: {
+    margin: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  contactSupportText: {
+    color: colors.primary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

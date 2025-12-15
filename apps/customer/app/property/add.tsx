@@ -171,13 +171,36 @@ export default function AddPropertyScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <Stack.Screen
         options={{
           headerShown: false,
           title: '',
         }}
       />
+
+      {/* Fixed Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => {
+            if (Platform.OS === 'web') {
+              if (window.history.length > 1) {
+                window.history.back();
+              } else {
+                router.replace('/request/new');
+              }
+            } else {
+              router.back();
+            }
+          }}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Add Property</Text>
+        <View style={styles.headerSpacer} />
+      </View>
 
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -188,30 +211,11 @@ export default function AddPropertyScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Back Button */}
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => {
-              if (Platform.OS === 'web') {
-                // On web, use browser history or navigate to a specific route
-                if (window.history.length > 1) {
-                  window.history.back();
-                } else {
-                  router.replace('/request/new');
-                }
-              } else {
-                router.back();
-              }
-            }}
-          >
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-
           <View style={styles.headerSection}>
             <View style={styles.iconContainer}>
               <Ionicons name="home" size={32} color="#8B5CF6" />
             </View>
-            <Text style={styles.headerTitle}>Register Your Property</Text>
+            <Text style={styles.sectionTitle}>Register Your Property</Text>
             <Text style={styles.headerSubtitle}>
               Enter your property details to create service requests
             </Text>
@@ -458,6 +462,14 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 40,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.1)',
+  },
   backButton: {
     width: 40,
     height: 40,
@@ -465,7 +477,16 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
   },
   headerSection: {
     alignItems: 'center',
@@ -480,7 +501,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  headerTitle: {
+  sectionTitle: {
     fontSize: 24,
     fontWeight: '700',
     color: '#fff',

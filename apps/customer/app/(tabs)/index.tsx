@@ -1,4 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -160,16 +161,17 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView style={[styles.container, dynamicStyles.container]}>
+    <SafeAreaView style={[styles.container, dynamicStyles.container]} edges={['top']}>
+    <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
       {/* Header Section */}
       <View style={styles.header}>
         <View style={styles.logoContainer}>
           <View style={styles.logo}>
             <Text style={styles.logoText}>{getUserInitials()}</Text>
           </View>
-          <View>
+          <View style={styles.userInfo}>
             <Text style={[styles.welcomeText, dynamicStyles.textMuted]}>Welcome back,</Text>
-            <Text style={[styles.brandText, dynamicStyles.text]}>{getDisplayName()}</Text>
+            <Text style={[styles.brandText, dynamicStyles.text]} numberOfLines={1}>{getDisplayName()}</Text>
           </View>
         </View>
         <TouchableOpacity style={styles.notificationBtn}>
@@ -203,7 +205,8 @@ export default function HomeScreen() {
             <ActivityIndicator size="small" color={colors.primary} />
             <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading services...</Text>
           </View>
-        ) : (
+        ) : serviceCategories.length <= 6 ? (
+          // Grid layout for 6 or fewer services
           <View style={styles.categoryGrid}>
             {serviceCategories.map((category) => (
               <TouchableOpacity
@@ -220,6 +223,28 @@ export default function HomeScreen() {
               </TouchableOpacity>
             ))}
           </View>
+        ) : (
+          // Horizontal scroll for more than 6 services
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryScroll}
+          >
+            {serviceCategories.map((category) => (
+              <TouchableOpacity
+                key={category.id}
+                style={[styles.categoryCardCompact, dynamicStyles.card]}
+                onPress={() => router.push({ pathname: '/request/new', params: { category: category.id, categoryName: category.name } })}
+              >
+                <View style={[styles.categoryIconContainerCompact, { backgroundColor: category.color + '20' }]}>
+                  <Ionicons name={category.icon as any} size={22} color={category.color} />
+                </View>
+                <Text style={[styles.categoryLabelCompact, dynamicStyles.text]} numberOfLines={2}>
+                  {language === 'ar' && category.nameAr ? category.nameAr : category.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         )}
       </View>
 
@@ -271,13 +296,17 @@ export default function HomeScreen() {
         </TouchableOpacity>
       </View>
 
-      <View style={{ height: spacing.xl }} />
+      <View style={{ height: spacing.md }} />
     </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   header: {
@@ -291,6 +320,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  userInfo: {
+    flex: 1,
   },
   logo: {
     width: 44,
@@ -379,6 +413,33 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     fontWeight: fontWeight.medium,
     textAlign: 'center',
+  },
+  // Horizontal scroll styles for many services
+  categoryScroll: {
+    paddingRight: spacing.lg,
+    gap: spacing.sm,
+  },
+  categoryCardCompact: {
+    width: 85,
+    alignItems: 'center',
+    padding: spacing.sm,
+    paddingVertical: spacing.md,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+  },
+  categoryIconContainerCompact: {
+    width: 40,
+    height: 40,
+    borderRadius: borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  categoryLabelCompact: {
+    fontSize: 10,
+    fontWeight: fontWeight.medium,
+    textAlign: 'center',
+    lineHeight: 13,
   },
   loadingContainer: {
     flexDirection: 'row',

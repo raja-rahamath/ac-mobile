@@ -125,3 +125,8 @@ export async function createServiceRequest(
     requestNo: rawData.requestNo || rawData.request_no, // Handle both formats
   };
 }
+
+export async function cancelServiceRequest(id: string): Promise<{ message: string; requestNo: string }> {
+  const data = await api.post(`${ENDPOINTS.SERVICE_REQUESTS}/${id}/cancel`, {});
+  return data.data || data;
+}

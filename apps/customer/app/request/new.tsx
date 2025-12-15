@@ -11,6 +11,9 @@ import {
   ActivityIndicator,
   Modal,
   Platform,
+  KeyboardAvoidingView,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
@@ -20,15 +23,16 @@ import * as Clipboard from 'expo-clipboard';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
 import { getMyProperties } from '../../src/services/propertyService';
 import { createServiceRequest } from '../../src/services/requestService';
+import { getServiceTypes, ServiceType } from '../../src/services/serviceTypesService';
 import type { Property, ServiceRequest } from '../../src/types';
 
-const SERVICE_CATEGORIES = [
-  { id: 'plumbing', label: 'Plumbing', icon: 'water', color: '#3b82f6' },
-  { id: 'electrical', label: 'Electrical', icon: 'flash', color: '#f59e0b' },
-  { id: 'hvac', label: 'AC / HVAC', icon: 'snow', color: '#06b6d4' },
-  { id: 'appliance', label: 'Appliances', icon: 'tv', color: '#8b5cf6' },
-  { id: 'cleaning', label: 'Cleaning', icon: 'sparkles', color: '#10b981' },
-  { id: 'general', label: 'General', icon: 'construct', color: '#64748b' },
+// Fallback service categories when API is not available
+const FALLBACK_SERVICE_CATEGORIES = [
+  { id: 'plumbing', name: 'Plumbing', nameAr: 'السباكة', icon: 'water', color: '#3b82f6' },
+  { id: 'electrical', name: 'Electrical', nameAr: 'الكهرباء', icon: 'flash', color: '#f59e0b' },
+  { id: 'hvac', name: 'AC / HVAC', nameAr: 'صيانة المكيفات', icon: 'snow', color: '#06b6d4' },
+  { id: 'cleaning', name: 'Cleaning', nameAr: 'التنظيف', icon: 'sparkles', color: '#10b981' },
+  { id: 'general', name: 'General', nameAr: 'الصيانة العامة', icon: 'construct', color: '#64748b' },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -50,6 +54,10 @@ export default function NewRequestScreen() {
   const [priority, setPriority] = useState('medium');
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Service types state
+  const [serviceCategories, setServiceCategories] = useState<ServiceType[]>([]);
+  const [isLoadingServiceTypes, setIsLoadingServiceTypes] = useState(true);
 
   // Properties state
   const [properties, setProperties] = useState<Property[]>([]);
@@ -78,8 +86,23 @@ export default function NewRequestScreen() {
   };
 
   useEffect(() => {
+    fetchServiceTypes();
     fetchProperties();
   }, []);
+
+  const fetchServiceTypes = async () => {
+    try {
+      setIsLoadingServiceTypes(true);
+      const types = await getServiceTypes();
+      setServiceCategories(types);
+    } catch (err) {
+      console.error('[NewRequest] Error fetching service types:', err);
+      // Fall back to hardcoded values
+      setServiceCategories(FALLBACK_SERVICE_CATEGORIES as unknown as ServiceType[]);
+    } finally {
+      setIsLoadingServiceTypes(false);
+    }
+  };
 
   const fetchProperties = async () => {
     try {
@@ -183,11 +206,13 @@ export default function NewRequestScreen() {
     router.back();
   };
 
-  if (isLoadingProperties) {
+  if (isLoadingProperties || isLoadingServiceTypes) {
     return (
       <View style={[styles.loadingContainer, dynamicStyles.container]}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading your properties...</Text>
+        <Text style={[styles.loadingText, dynamicStyles.textMuted]}>
+          {isLoadingServiceTypes ? 'Loading services...' : 'Loading your properties...'}
+        </Text>
       </View>
     );
   }
@@ -207,7 +232,17 @@ export default function NewRequestScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <KeyboardAvoidingView
+        style={styles.keyboardView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+      <ScrollView
+        style={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.scrollContentContainer}
+      >
       {/* No Property Alert Modal */}
       <Modal
         visible={showNoPropertyAlert}
@@ -290,10 +325,10 @@ export default function NewRequestScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.modalButton, styles.modalButtonPrimary, { width: '100%', marginTop: spacing.md }]}
+              style={[styles.successButton]}
               onPress={handleSuccessOk}
             >
-              <Text style={styles.modalButtonPrimaryText}>View My Requests</Text>
+              <Text style={styles.successButtonText}>View My Requests</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -344,6 +379,24 @@ export default function NewRequestScreen() {
                   )}
                 </TouchableOpacity>
               ))}
+
+              {/* Add New Property Button */}
+              <TouchableOpacity
+                style={[styles.addPropertyButton, dynamicStyles.card]}
+                onPress={() => {
+                  setShowPropertyPicker(false);
+                  router.push(`/property/add?returnTo=newRequest&category=${category}`);
+                }}
+              >
+                <View style={styles.pickerItemContent}>
+                  <View style={styles.addPropertyIcon}>
+                    <Ionicons name="add" size={20} color={colors.white} />
+                  </View>
+                  <Text style={[styles.addPropertyText, { color: colors.primary }]}>
+                    Add New Property
+                  </Text>
+                </View>
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
@@ -353,7 +406,7 @@ export default function NewRequestScreen() {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>Service Type *</Text>
         <View style={styles.categoryGrid}>
-          {SERVICE_CATEGORIES.map((cat) => (
+          {serviceCategories.map((cat) => (
             <TouchableOpacity
               key={cat.id}
               style={[
@@ -366,7 +419,7 @@ export default function NewRequestScreen() {
               <View style={[styles.categoryIcon, { backgroundColor: cat.color + '20' }]}>
                 <Ionicons name={cat.icon as any} size={24} color={cat.color} />
               </View>
-              <Text style={[styles.categoryLabel, dynamicStyles.text]}>{cat.label}</Text>
+              <Text style={[styles.categoryLabel, dynamicStyles.text]}>{cat.name}</Text>
               {category === cat.id && (
                 <View style={[styles.checkIcon, { backgroundColor: cat.color }]}>
                   <Ionicons name="checkmark" size={14} color={colors.white} />
@@ -450,7 +503,7 @@ export default function NewRequestScreen() {
           >
             {selectedProperty?.address || selectedProperty?.unitNo || 'No property selected'}
           </Text>
-          {properties.length > 1 && (
+          {properties.length >= 1 && (
             <Ionicons name="chevron-down" size={20} color={isDark ? colors.textMutedDark : colors.textMuted} />
           )}
         </TouchableOpacity>
@@ -495,14 +548,17 @@ export default function NewRequestScreen() {
         </Pressable>
       </View>
 
-      <View style={{ height: spacing.xxl }} />
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  keyboardView: {
+    flex: 1,
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -530,6 +586,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
+  },
+  scrollContentContainer: {
+    paddingBottom: spacing.xxl * 2,
   },
   loadingContainer: {
     flex: 1,
@@ -736,6 +795,20 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },
+  successButton: {
+    width: '100%',
+    backgroundColor: colors.primary,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.md,
+  },
+  successButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
   modalButtonSecondary: {
     backgroundColor: colors.primary + '15',
   },
@@ -798,6 +871,30 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.primary,
     marginTop: 2,
+  },
+  addPropertyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  addPropertyIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addPropertyText: {
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+    marginLeft: spacing.md,
   },
   // Success modal styles
   requestNumberCard: {
