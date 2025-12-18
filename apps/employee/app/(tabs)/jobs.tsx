@@ -156,14 +156,16 @@ export default function JobsScreen() {
       // Try legacy Property model
       if (sr?.property) {
         const prop = sr.property;
-        const parts: string[] = [];
+        // Use the pre-formatted address if available
+        if (prop.address) return prop.address;
 
+        // Otherwise build from components
+        const parts: string[] = [];
         if (prop.building) parts.push(`Bldg ${prop.building}`);
         const areaName = prop.areaRef?.name || prop.areaName;
         if (areaName) parts.push(areaName);
 
         if (parts.length > 0) return parts.join(', ');
-        if (prop.address) return prop.address;
       }
 
       // Try work order property

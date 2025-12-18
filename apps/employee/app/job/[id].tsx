@@ -127,15 +127,16 @@ export default function JobDetailScreen() {
     // Try legacy Property model
     if (sr?.property) {
       const prop = sr.property;
-      const parts: string[] = [];
+      // Use the pre-formatted address if available
+      if (prop.address) return prop.address;
 
+      // Otherwise build from components
+      const parts: string[] = [];
       if (prop.building) parts.push(`Building ${prop.building}`);
-      // Property has areaName or areaRef
       const areaName = prop.areaRef?.name || prop.areaName;
       if (areaName) parts.push(areaName);
 
       if (parts.length > 0) return parts.join(', ');
-      if (prop.address) return prop.address;
     }
 
     // Fallback to zone name
