@@ -1,4 +1,5 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, Linking, ActivityIndicator, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useState, useEffect } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -193,12 +194,26 @@ export default function RequestDetailScreen() {
   const priority = (request.priority || 'MEDIUM').toLowerCase();
 
   return (
-    <ScrollView style={[styles.container, dynamicStyles.container]}>
-      {/* Status Banner */}
-      <View style={[styles.statusBanner, { backgroundColor: statusConfig.color }]}>
-        <Ionicons name={statusConfig.icon as any} size={24} color={colors.white} />
-        <Text style={styles.statusText}>{statusConfig.label}</Text>
+    <SafeAreaView style={[styles.container, dynamicStyles.container]} edges={['top']}>
+      {/* Header with Back Button */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.back()}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
+          <Ionicons name="arrow-back" size={24} color={isDark ? colors.textDark : colors.text} />
+        </TouchableOpacity>
+        <Text style={[styles.headerTitle, dynamicStyles.text]}>Request Details</Text>
+        <View style={styles.headerSpacer} />
       </View>
+
+      <ScrollView style={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Status Banner */}
+        <View style={[styles.statusBanner, { backgroundColor: statusConfig.color }]}>
+          <Ionicons name={statusConfig.icon as any} size={24} color={colors.white} />
+          <Text style={styles.statusText}>{statusConfig.label}</Text>
+        </View>
 
       {/* Request Info */}
       <View style={[styles.card, dynamicStyles.card]}>
@@ -343,13 +358,38 @@ export default function RequestDetailScreen() {
         </TouchableOpacity>
       )}
 
-      <View style={{ height: spacing.xxl }} />
-    </ScrollView>
+        <View style={{ height: spacing.xxl }} />
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128,128,128,0.2)',
+  },
+  backButton: {
+    padding: spacing.xs,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    textAlign: 'center',
+    marginRight: 32, // Offset for back button
+  },
+  headerSpacer: {
+    width: 32,
+  },
+  scrollContent: {
+    flex: 1,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',

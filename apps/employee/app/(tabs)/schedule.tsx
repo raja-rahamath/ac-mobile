@@ -1,43 +1,21 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme } from 'react-native';
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, ActivityIndicator, RefreshControl } from 'react-native';
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
+import { getMyJobs, getStatusInfo } from '../../src/services/jobService';
+import type { WorkOrder } from '../../src/types';
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const DATES = [22, 23, 24, 25, 26, 27, 28];
-
-interface ScheduleItem {
-  id: string;
-  title: string;
-  customer: string;
-  time: string;
-  duration: string;
-  status: 'scheduled' | 'completed';
-}
-
-const MOCK_SCHEDULE: Record<number, ScheduleItem[]> = {
-  24: [
-    { id: '1', title: 'AC Repair', customer: 'Ahmed Al-Rashid', time: '10:00 AM', duration: '2h', status: 'scheduled' },
-    { id: '2', title: 'Plumbing Fix', customer: 'Fatima Hassan', time: '1:00 PM', duration: '1h', status: 'scheduled' },
-    { id: '3', title: 'Electrical Outlet', customer: 'Mohammed K.', time: '4:00 PM', duration: '45m', status: 'scheduled' },
-    { id: '4', title: 'Water Heater', customer: 'Sarah M.', time: '6:00 PM', duration: '1.5h', status: 'scheduled' },
-  ],
-  25: [
-    { id: '5', title: 'AC Maintenance', customer: 'Khalid Ibrahim', time: '9:00 AM', duration: '2h', status: 'scheduled' },
-    { id: '6', title: 'Light Fixture', customer: 'Noura Q.', time: '12:00 PM', duration: '1h', status: 'scheduled' },
-  ],
-  23: [
-    { id: '7', title: 'Drain Cleaning', customer: 'Omar Hassan', time: '11:00 AM', duration: '1h', status: 'completed' },
-    { id: '8', title: 'AC Check', customer: 'Layla S.', time: '3:00 PM', duration: '1h', status: 'completed' },
-  ],
-};
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function ScheduleScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const [selectedDate, setSelectedDate] = useState(24);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [jobs, setJobs] = useState<WorkOrder[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? colors.backgroundDark : colors.background },
@@ -49,56 +27,131 @@ export default function ScheduleScreen() {
     },
   };
 
-  const scheduleItems = MOCK_SCHEDULE[selectedDate] || [];
+  // Get current week dates
+  const weekDates = useMemo(() => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - dayOfWeek);
+
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      return date;
+    });
+  }, []);
+
+  const fetchJobs = async () => {
+    try {
+      const response = await getMyJobs({ limit: 100 });
+      setJobs(response.data || []);
+    } catch (err) {
+      console.error('Error fetching schedule:', err);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobs();
+    }, [])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchJobs();
+  }, []);
+
+  // Filter jobs for selected date
+  const selectedDateStr = selectedDate.toDateString();
+  const scheduleItems = jobs.filter(job => {
+    if (!job.scheduledDate) return false;
+    return new Date(job.scheduledDate).toDateString() === selectedDateStr;
+  }).sort((a, b) => {
+    if (!a.scheduledDate || !b.scheduledDate) return 0;
+    return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+  });
+
+  // Check if any date has jobs
+  const dateHasJobs = (date: Date) => {
+    const dateStr = date.toDateString();
+    return jobs.some(job => job.scheduledDate && new Date(job.scheduledDate).toDateString() === dateStr);
+  };
+
+  const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
+  const isSelected = (date: Date) => date.toDateString() === selectedDate.toDateString();
+
+  const formatMonth = (date: Date) => {
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  };
+
+  const formatScheduleTitle = () => {
+    if (isToday(selectedDate)) return "Today's Schedule";
+    return `Schedule for ${selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}`;
+  };
 
   return (
     <View style={[styles.container, dynamicStyles.container]}>
       {/* Month Header */}
       <View style={styles.monthHeader}>
-        <TouchableOpacity>
-          <Ionicons name="chevron-back" size={24} color={isDark ? colors.textDark : colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.monthText, dynamicStyles.text]}>January 2024</Text>
-        <TouchableOpacity>
-          <Ionicons name="chevron-forward" size={24} color={isDark ? colors.textDark : colors.text} />
-        </TouchableOpacity>
+        <Text style={[styles.monthText, dynamicStyles.text]}>{formatMonth(selectedDate)}</Text>
       </View>
 
       {/* Week Selector */}
       <View style={styles.weekSelector}>
-        {DAYS.map((day, index) => {
-          const date = DATES[index];
-          const isSelected = date === selectedDate;
-          const hasJobs = MOCK_SCHEDULE[date]?.length > 0;
+        {weekDates.map((date) => {
+          const dayIndex = date.getDay();
+          const hasJobs = dateHasJobs(date);
+          const selected = isSelected(date);
+          const today = isToday(date);
 
           return (
             <TouchableOpacity
-              key={day}
-              style={[styles.dayCard, isSelected && styles.dayCardSelected]}
+              key={date.toISOString()}
+              style={[
+                styles.dayCard,
+                selected && styles.dayCardSelected,
+                today && !selected && styles.dayCardToday,
+              ]}
               onPress={() => setSelectedDate(date)}
             >
-              <Text style={[styles.dayText, dynamicStyles.textMuted, isSelected && styles.dayTextSelected]}>
-                {day}
+              <Text style={[styles.dayText, dynamicStyles.textMuted, selected && styles.dayTextSelected]}>
+                {DAYS[dayIndex]}
               </Text>
-              <Text style={[styles.dateText, dynamicStyles.text, isSelected && styles.dateTextSelected]}>
-                {date}
+              <Text style={[styles.dateText, dynamicStyles.text, selected && styles.dateTextSelected]}>
+                {date.getDate()}
               </Text>
-              {hasJobs && <View style={[styles.dot, isSelected && styles.dotSelected]} />}
+              {hasJobs && <View style={[styles.dot, selected && styles.dotSelected]} />}
             </TouchableOpacity>
           );
         })}
       </View>
 
       {/* Schedule List */}
-      <ScrollView style={styles.scheduleList} contentContainerStyle={styles.scheduleContent}>
-        <Text style={[styles.scheduleTitle, dynamicStyles.text]}>
-          {selectedDate === 24 ? "Today's Schedule" : `Schedule for Jan ${selectedDate}`}
-        </Text>
+      <ScrollView
+        style={styles.scheduleList}
+        contentContainerStyle={styles.scheduleContent}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+      >
+        <Text style={[styles.scheduleTitle, dynamicStyles.text]}>{formatScheduleTitle()}</Text>
         <Text style={[styles.jobCount, dynamicStyles.textMuted]}>
           {scheduleItems.length} job{scheduleItems.length !== 1 ? 's' : ''}
         </Text>
 
-        {scheduleItems.length === 0 ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading schedule...</Text>
+          </View>
+        ) : scheduleItems.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="calendar-outline" size={64} color={isDark ? colors.textMutedDark : colors.textMuted} />
             <Text style={[styles.emptyTitle, dynamicStyles.text]}>No jobs scheduled</Text>
@@ -108,35 +161,61 @@ export default function ScheduleScreen() {
           </View>
         ) : (
           <View style={styles.timeline}>
-            {scheduleItems.map((item, index) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.timelineItem}
-                onPress={() => router.push(`/job/${item.id}`)}
-              >
-                <View style={styles.timeColumn}>
-                  <Text style={[styles.timeText, dynamicStyles.text]}>{item.time}</Text>
-                  <Text style={[styles.durationText, dynamicStyles.textMuted]}>{item.duration}</Text>
-                </View>
-                <View style={styles.lineColumn}>
-                  <View style={[styles.timelineDot, item.status === 'completed' && styles.completedDot]} />
-                  {index < scheduleItems.length - 1 && (
-                    <View style={[styles.timelineLine, dynamicStyles.card]} />
-                  )}
-                </View>
-                <View style={[styles.scheduleCard, dynamicStyles.card]}>
-                  <View style={styles.scheduleCardHeader}>
-                    <Text style={[styles.scheduleCardTitle, dynamicStyles.text]}>{item.title}</Text>
-                    {item.status === 'completed' && (
-                      <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+            {scheduleItems.map((item, index) => {
+              const statusInfo = getStatusInfo(item.status);
+              const customer = item.customer || item.serviceRequest?.customer;
+              const customerName = customer
+                ? `${customer.firstName || ''} ${customer.lastName || ''}`.trim()
+                : 'Unknown';
+              const time = item.scheduledDate
+                ? new Date(item.scheduledDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+                : 'TBD';
+              const duration = item.estimatedDuration
+                ? item.estimatedDuration >= 60
+                  ? `${Math.floor(item.estimatedDuration / 60)}h ${item.estimatedDuration % 60}m`
+                  : `${item.estimatedDuration}m`
+                : 'TBD';
+              const isCompleted = item.status === 'COMPLETED';
+
+              return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={styles.timelineItem}
+                  onPress={() => router.push(`/job/${item.id}`)}
+                >
+                  <View style={styles.timeColumn}>
+                    <Text style={[styles.timeText, dynamicStyles.text]}>{time}</Text>
+                    <Text style={[styles.durationText, dynamicStyles.textMuted]}>{duration}</Text>
+                  </View>
+                  <View style={styles.lineColumn}>
+                    <View style={[styles.timelineDot, { backgroundColor: statusInfo.color, borderColor: statusInfo.color }]} />
+                    {index < scheduleItems.length - 1 && (
+                      <View style={[styles.timelineLine, dynamicStyles.card]} />
                     )}
                   </View>
-                  <Text style={[styles.scheduleCardCustomer, dynamicStyles.textMuted]}>
-                    {item.customer}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+                  <View style={[styles.scheduleCard, dynamicStyles.card]}>
+                    <View style={styles.scheduleCardHeader}>
+                      <Text style={[styles.scheduleCardTitle, dynamicStyles.text]} numberOfLines={1}>
+                        {item.title || item.serviceRequest?.title || 'Work Order'}
+                      </Text>
+                      {isCompleted ? (
+                        <Ionicons name="checkmark-circle" size={18} color={colors.success} />
+                      ) : (
+                        <View style={[styles.statusBadge, { backgroundColor: statusInfo.color + '20' }]}>
+                          <Text style={[styles.statusText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.scheduleCardCustomer, dynamicStyles.textMuted]}>
+                      {customerName}
+                    </Text>
+                    <Text style={[styles.scheduleCardRef, dynamicStyles.textMuted]}>
+                      {item.serviceRequest?.requestNo || item.workOrderNo}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         )}
       </ScrollView>
@@ -148,7 +227,7 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   monthHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
@@ -171,6 +250,9 @@ const styles = StyleSheet.create({
   },
   dayCardSelected: {
     backgroundColor: colors.primary,
+  },
+  dayCardToday: {
+    backgroundColor: colors.primary + '20',
   },
   dayText: {
     fontSize: fontSize.xs,
@@ -213,6 +295,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     marginBottom: spacing.lg,
   },
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxl,
+  },
+  loadingText: {
+    fontSize: fontSize.sm,
+    marginTop: spacing.md,
+  },
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
@@ -229,7 +319,7 @@ const styles = StyleSheet.create({
   timeline: {},
   timelineItem: {
     flexDirection: 'row',
-    minHeight: 80,
+    minHeight: 90,
   },
   timeColumn: {
     width: 70,
@@ -252,13 +342,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: colors.primary,
     borderWidth: 2,
-    borderColor: colors.primary,
-  },
-  completedDot: {
-    backgroundColor: colors.success,
-    borderColor: colors.success,
   },
   timelineLine: {
     width: 2,
@@ -280,9 +364,23 @@ const styles = StyleSheet.create({
   scheduleCardTitle: {
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
+    flex: 1,
   },
   scheduleCardCustomer: {
     fontSize: fontSize.sm,
     marginTop: 2,
+  },
+  scheduleCardRef: {
+    fontSize: fontSize.xs,
+    marginTop: 2,
+  },
+  statusBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  statusText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
   },
 });

@@ -1,103 +1,49 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, useColorScheme, RefreshControl } from 'react-native';
-import { useState, useCallback } from 'react';
-import { useRouter } from 'expo-router';
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  useColorScheme,
+  RefreshControl,
+  ActivityIndicator,
+} from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
-
-interface Job {
-  id: string;
-  title: string;
-  customerName: string;
-  address: string;
-  scheduledTime: string;
-  category: string;
-  status: 'pending' | 'accepted' | 'en_route' | 'in_progress' | 'completed';
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  estimatedDuration: string;
-}
-
-const MOCK_JOBS: Job[] = [
-  {
-    id: '1',
-    title: 'AC Repair',
-    customerName: 'Ahmed Al-Rashid',
-    address: 'Villa 23, Palm Jumeirah',
-    scheduledTime: '10:00 AM',
-    category: 'hvac',
-    status: 'accepted',
-    priority: 'high',
-    estimatedDuration: '2 hours',
-  },
-  {
-    id: '2',
-    title: 'Plumbing Fix',
-    customerName: 'Fatima Hassan',
-    address: 'Apt 1204, Marina Tower',
-    scheduledTime: '1:00 PM',
-    category: 'plumbing',
-    status: 'pending',
-    priority: 'medium',
-    estimatedDuration: '1 hour',
-  },
-  {
-    id: '3',
-    title: 'Electrical Outlet',
-    customerName: 'Mohammed Khalid',
-    address: 'Villa 45, Emirates Hills',
-    scheduledTime: '4:00 PM',
-    category: 'electrical',
-    status: 'pending',
-    priority: 'low',
-    estimatedDuration: '45 min',
-  },
-  {
-    id: '4',
-    title: 'Water Heater Service',
-    customerName: 'Sarah Al-Mahmoud',
-    address: 'Apt 508, JBR Walk',
-    scheduledTime: '6:00 PM',
-    category: 'plumbing',
-    status: 'pending',
-    priority: 'medium',
-    estimatedDuration: '1.5 hours',
-  },
-];
-
-const STATUS_CONFIG = {
-  pending: { label: 'Pending', color: '#f59e0b', icon: 'time' },
-  accepted: { label: 'Accepted', color: '#3b82f6', icon: 'checkmark-circle' },
-  en_route: { label: 'En Route', color: '#06b6d4', icon: 'navigate' },
-  in_progress: { label: 'In Progress', color: '#10b981', icon: 'construct' },
-  completed: { label: 'Completed', color: '#22c55e', icon: 'checkmark-done' },
-};
+import { getMyJobs, getStatusInfo, getPriorityInfo, startRoute } from '../../src/services/jobService';
+import { useAuth } from '../../src/contexts/AuthContext';
+import type { WorkOrder, WorkOrderStatus, JobFilter } from '../../src/types';
 
 const CATEGORY_ICONS: Record<string, string> = {
+  Plumbing: 'water',
   plumbing: 'water',
+  Electrical: 'flash',
   electrical: 'flash',
+  HVAC: 'snow',
   hvac: 'snow',
+  'AC Maintenance': 'snow',
+  Appliance: 'tv',
   appliance: 'tv',
-  cleaning: 'sparkles',
+  Cleaning: 'sparkles',
+  cleaning: 'cleaning',
+  General: 'construct',
   general: 'construct',
-};
-
-const PRIORITY_COLORS = {
-  low: '#22c55e',
-  medium: '#f59e0b',
-  high: '#ef4444',
-  urgent: '#dc2626',
+  'General Maintenance': 'construct',
 };
 
 export default function JobsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { user } = useAuth();
+  const employeeId = user?.employee?.id;
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'active'>('all');
-
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
-  }, []);
+  const [isLoading, setIsLoading] = useState(true);
+  const [filter, setFilter] = useState<JobFilter>('all');
+  const [jobs, setJobs] = useState<WorkOrder[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? colors.backgroundDark : colors.background },
@@ -109,15 +55,139 @@ export default function JobsScreen() {
     },
   };
 
-  const filteredJobs = MOCK_JOBS.filter((job) => {
-    if (filter === 'pending') return job.status === 'pending';
-    if (filter === 'active') return ['accepted', 'en_route', 'in_progress'].includes(job.status);
-    return true;
-  });
+  const fetchJobs = async () => {
+    try {
+      setError(null);
 
-  const renderJob = ({ item }: { item: Job }) => {
-    const statusConfig = STATUS_CONFIG[item.status];
-    const categoryIcon = CATEGORY_ICONS[item.category] || 'construct';
+      // Determine status filter based on selected tab
+      let statusFilter: WorkOrderStatus[] | undefined;
+      if (filter === 'pending') {
+        statusFilter = ['PENDING', 'SCHEDULED', 'CONFIRMED'];
+      } else if (filter === 'active') {
+        statusFilter = ['EN_ROUTE', 'ARRIVED', 'IN_PROGRESS', 'ON_HOLD'];
+      } else if (filter === 'completed') {
+        statusFilter = ['COMPLETED'];
+      }
+
+      const response = await getMyJobs({
+        status: statusFilter,
+        limit: 50,
+      });
+
+      setJobs(response.data || []);
+    } catch (err: any) {
+      console.error('Error fetching jobs:', err);
+      setError(err.message || 'Failed to load jobs');
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Fetch jobs on mount and when filter changes
+  useEffect(() => {
+    setIsLoading(true);
+    fetchJobs();
+  }, [filter]);
+
+  // Refresh jobs when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobs();
+    }, [filter])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchJobs();
+  }, [filter]);
+
+  const handleStartRoute = async (job: WorkOrder) => {
+    if (!employeeId) {
+      console.error('Employee ID not found');
+      return;
+    }
+    try {
+      await startRoute(job.id, { employeeId });
+      // Refresh the list
+      fetchJobs();
+      // Navigate to job detail
+      router.push(`/job/${job.id}`);
+    } catch (err: any) {
+      console.error('Error starting route:', err);
+    }
+  };
+
+  const filteredJobs = jobs;
+
+  const renderJob = ({ item }: { item: WorkOrder }) => {
+    const statusInfo = getStatusInfo(item.status);
+    const priorityInfo = getPriorityInfo(item.priority);
+    const categoryIcon =
+      CATEGORY_ICONS[item.serviceRequest?.complaintType?.name || ''] || 'construct';
+
+    // Get customer info from work order or service request
+    const customer = item.customer || item.serviceRequest?.customer;
+    const customerName = customer
+      ? customer.customerType === 'ORGANIZATION'
+        ? customer.orgName
+        : `${customer.firstName || ''} ${customer.lastName || ''}`.trim()
+      : 'Unknown Customer';
+
+    // Get Bahrain-format address (Building, Road, Block, Area)
+    const formatBahrainAddress = () => {
+      const sr = item.serviceRequest;
+
+      // Try Unit -> Building -> Block/Road/Area (new architecture)
+      if (sr?.unit?.building) {
+        const building = sr.unit.building;
+        const parts: string[] = [];
+
+        if (building.buildingNo) parts.push(`Bldg ${building.buildingNo}`);
+        if (building.road?.roadNo) parts.push(`Rd ${building.road.roadNo}`);
+        if (building.block?.blockNo) parts.push(`Blk ${building.block.blockNo}`);
+
+        const areaName = building.area?.name || building.block?.area?.name;
+        if (areaName) parts.push(areaName);
+
+        if (parts.length > 0) return parts.join(', ');
+      }
+
+      // Try legacy Property model
+      if (sr?.property) {
+        const prop = sr.property;
+        const parts: string[] = [];
+
+        if (prop.building) parts.push(`Bldg ${prop.building}`);
+        const areaName = prop.areaRef?.name || prop.areaName;
+        if (areaName) parts.push(areaName);
+
+        if (parts.length > 0) return parts.join(', ');
+        if (prop.address) return prop.address;
+      }
+
+      // Try work order property
+      if (item.property?.address) return item.property.address;
+
+      // Fallback to zone name
+      return sr?.zone?.name || 'Location TBD';
+    };
+
+    const address = formatBahrainAddress();
+
+    // Show full date and time
+    const scheduledDateTime = item.scheduledDate
+      ? `${new Date(item.scheduledDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${new Date(item.scheduledDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+      : 'Not scheduled';
+
+    const estimatedDuration = item.estimatedDuration
+      ? item.estimatedDuration >= 60
+        ? `${Math.floor(item.estimatedDuration / 60)}h ${item.estimatedDuration % 60}m`
+        : `${item.estimatedDuration}m`
+      : 'TBD';
+
+    // Show service request number instead of work order number
+    const requestNo = item.serviceRequest?.requestNo || item.workOrderNo;
 
     return (
       <TouchableOpacity
@@ -130,84 +200,145 @@ export default function JobsScreen() {
           </View>
           <View style={styles.jobInfo}>
             <View style={styles.jobTitleRow}>
-              <Text style={[styles.jobTitle, dynamicStyles.text]}>{item.title}</Text>
-              <View style={[styles.priorityDot, { backgroundColor: PRIORITY_COLORS[item.priority] }]} />
+              <Text style={[styles.jobTitle, dynamicStyles.text]} numberOfLines={1}>
+                {item.title || item.serviceRequest?.title || 'Work Order'}
+              </Text>
+              <View style={[styles.priorityDot, { backgroundColor: priorityInfo.color }]} />
             </View>
-            <Text style={[styles.customerName, dynamicStyles.textMuted]}>{item.customerName}</Text>
+            <Text style={[styles.customerName, dynamicStyles.textMuted]}>{customerName}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusConfig.color + '20' }]}>
-            <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusInfo.color + '20' }]}>
+            <Text style={[styles.statusText, { color: statusInfo.color }]}>{statusInfo.label}</Text>
           </View>
         </View>
 
         <View style={styles.jobDetails}>
           <View style={styles.detailRow}>
-            <Ionicons name="location-outline" size={16} color={isDark ? colors.textMutedDark : colors.textMuted} />
+            <Ionicons
+              name="location-outline"
+              size={16}
+              color={isDark ? colors.textMutedDark : colors.textMuted}
+            />
             <Text style={[styles.detailText, dynamicStyles.textMuted]} numberOfLines={1}>
-              {item.address}
+              {address}
             </Text>
           </View>
           <View style={styles.detailRow}>
-            <Ionicons name="time-outline" size={16} color={isDark ? colors.textMutedDark : colors.textMuted} />
+            <Ionicons
+              name="calendar-outline"
+              size={16}
+              color={isDark ? colors.textMutedDark : colors.textMuted}
+            />
             <Text style={[styles.detailText, dynamicStyles.textMuted]}>
-              {item.scheduledTime} • Est. {item.estimatedDuration}
+              {scheduledDateTime} • Est. {estimatedDuration}
             </Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Ionicons
+              name="document-text-outline"
+              size={16}
+              color={isDark ? colors.textMutedDark : colors.textMuted}
+            />
+            <Text style={[styles.detailText, dynamicStyles.textMuted]}>{requestNo}</Text>
           </View>
         </View>
 
-        {item.status === 'pending' && (
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={[styles.rejectButton, dynamicStyles.card]}>
-              <Text style={styles.rejectText}>Decline</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.acceptButton}>
-              <Text style={styles.acceptText}>Accept Job</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-        {item.status === 'accepted' && (
+        {/* Action buttons based on status */}
+        {(item.status === 'PENDING' || item.status === 'SCHEDULED' || item.status === 'CONFIRMED') && (
           <TouchableOpacity
             style={styles.startButton}
-            onPress={() => router.push(`/navigate/${item.id}`)}
+            onPress={() => handleStartRoute(item)}
           >
             <Ionicons name="navigate" size={18} color={colors.white} />
             <Text style={styles.startButtonText}>Start Navigation</Text>
           </TouchableOpacity>
         )}
+
+        {item.status === 'EN_ROUTE' && (
+          <View style={styles.enRouteInfo}>
+            <Ionicons name="car" size={18} color={colors.primary} />
+            <Text style={[styles.enRouteText, { color: colors.primary }]}>
+              Traveling to location...
+            </Text>
+          </View>
+        )}
+
+        {item.status === 'IN_PROGRESS' && (
+          <View style={styles.inProgressInfo}>
+            <Ionicons name="construct" size={18} color={colors.success} />
+            <Text style={[styles.inProgressText, { color: colors.success }]}>Work in progress</Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
+
+  if (isLoading && jobs.length === 0) {
+    return (
+      <View style={[styles.loadingContainer, dynamicStyles.container]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading jobs...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={[styles.container, dynamicStyles.container]}>
       {/* Filter Tabs */}
       <View style={styles.filterContainer}>
-        {(['all', 'pending', 'active'] as const).map((f) => (
+        {(['all', 'pending', 'active', 'completed'] as const).map((f) => (
           <TouchableOpacity
             key={f}
             style={[styles.filterTab, filter === f && styles.filterTabActive]}
             onPress={() => setFilter(f)}
           >
             <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f === 'all' ? 'All' : f === 'pending' ? 'Pending' : 'Active'}
+              {f === 'all'
+                ? 'All'
+                : f === 'pending'
+                ? 'Pending'
+                : f === 'active'
+                ? 'Active'
+                : 'Done'}
             </Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {error && (
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle" size={20} color={colors.error} />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity onPress={onRefresh}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <FlatList
         data={filteredJobs}
         renderItem={renderJob}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContainer}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Ionicons name="briefcase-outline" size={64} color={isDark ? colors.textMutedDark : colors.textMuted} />
+            <Ionicons
+              name="briefcase-outline"
+              size={64}
+              color={isDark ? colors.textMutedDark : colors.textMuted}
+            />
             <Text style={[styles.emptyTitle, dynamicStyles.text]}>No jobs found</Text>
             <Text style={[styles.emptySubtitle, dynamicStyles.textMuted]}>
-              New jobs will appear here when assigned
+              {filter === 'all'
+                ? 'New jobs will appear here when assigned'
+                : filter === 'pending'
+                ? 'No pending jobs'
+                : filter === 'active'
+                ? 'No jobs in progress'
+                : 'No completed jobs'}
             </Text>
           </View>
         }
@@ -218,6 +349,15 @@ export default function JobsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: fontSize.md,
+  },
   filterContainer: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
@@ -225,7 +365,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   filterTab: {
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.full,
     backgroundColor: colors.primary + '10',
@@ -240,6 +380,25 @@ const styles = StyleSheet.create({
   },
   filterTextActive: {
     color: colors.white,
+  },
+  errorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.error + '15',
+    marginHorizontal: spacing.lg,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+  },
+  errorText: {
+    flex: 1,
+    color: colors.error,
+    fontSize: fontSize.sm,
+  },
+  retryText: {
+    color: colors.primary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
   },
   listContainer: {
     padding: spacing.lg,
@@ -274,6 +433,7 @@ const styles = StyleSheet.create({
   jobTitle: {
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
+    flex: 1,
   },
   priorityDot: {
     width: 8,
@@ -306,35 +466,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     flex: 1,
   },
-  actionButtons: {
-    flexDirection: 'row',
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
-  rejectButton: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    borderWidth: 1,
-  },
-  rejectText: {
-    color: colors.error,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.semibold,
-  },
-  acceptButton: {
-    flex: 2,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.md,
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-  },
-  acceptText: {
-    color: colors.white,
-    fontSize: fontSize.sm,
-    fontWeight: fontWeight.semibold,
-  },
   startButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -350,6 +481,34 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
   },
+  enRouteInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: spacing.md,
+    gap: spacing.xs,
+    backgroundColor: colors.primary + '10',
+    borderRadius: borderRadius.md,
+  },
+  enRouteText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  inProgressInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: spacing.md,
+    gap: spacing.xs,
+    backgroundColor: colors.success + '10',
+    borderRadius: borderRadius.md,
+  },
+  inProgressText: {
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
   emptyContainer: {
     alignItems: 'center',
     paddingVertical: spacing.xxl,
@@ -362,5 +521,6 @@ const styles = StyleSheet.create({
   emptySubtitle: {
     fontSize: fontSize.sm,
     marginTop: spacing.xs,
+    textAlign: 'center',
   },
 });

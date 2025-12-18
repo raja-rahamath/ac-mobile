@@ -1,18 +1,9 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, Switch, Alert } from 'react-native';
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
-
-const MOCK_TECHNICIAN = {
-  name: 'Ahmed Hassan',
-  email: 'ahmed.hassan@agentcare.com',
-  phone: '+971 50 123 4567',
-  employeeId: 'TECH-1234',
-  rating: 4.8,
-  totalJobs: 347,
-  specialties: ['HVAC', 'Refrigeration', 'Plumbing'],
-  joinedDate: 'March 2022',
-};
+import { useAuth } from '../../src/contexts/AuthContext';
 
 interface MenuItemProps {
   icon: string;
@@ -70,6 +61,8 @@ function MenuItem({
 export default function ProfileScreen() {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const router = useRouter();
+  const { user, logout } = useAuth();
   const [locationSharing, setLocationSharing] = useState(true);
   const [notifications, setNotifications] = useState(true);
 
@@ -83,11 +76,29 @@ export default function ProfileScreen() {
     },
   };
 
+  // Get user display info
+  const userName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Technician' : 'Technician';
+  const userInitial = userName.charAt(0).toUpperCase();
+  const userEmail = user?.email || '';
+  const userRole = user?.role?.displayName || 'Technician';
+
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: () => console.log('Logged out') },
+      {
+        text: 'Sign Out',
+        style: 'destructive',
+        onPress: async () => {
+          await logout();
+          router.replace('/(auth)/login');
+        }
+      },
     ]);
+  };
+
+  const handleMenuPress = (item: string) => {
+    // For now show coming soon for unimplemented features
+    Alert.alert('Coming Soon', `${item} feature will be available soon.`);
   };
 
   return (
@@ -95,10 +106,13 @@ export default function ProfileScreen() {
       {/* Profile Header */}
       <View style={styles.profileHeader}>
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{MOCK_TECHNICIAN.name.charAt(0)}</Text>
+          <Text style={styles.avatarText}>{userInitial}</Text>
         </View>
-        <Text style={[styles.userName, dynamicStyles.text]}>{MOCK_TECHNICIAN.name}</Text>
-        <Text style={[styles.employeeId, dynamicStyles.textMuted]}>ID: {MOCK_TECHNICIAN.employeeId}</Text>
+        <Text style={[styles.userName, dynamicStyles.text]}>{userName}</Text>
+        <Text style={[styles.employeeId, dynamicStyles.textMuted]}>{userRole}</Text>
+        {userEmail && (
+          <Text style={[styles.userEmail, dynamicStyles.textMuted]}>{userEmail}</Text>
+        )}
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
@@ -106,7 +120,7 @@ export default function ProfileScreen() {
             <View style={styles.statIconContainer}>
               <Ionicons name="star" size={16} color="#f59e0b" />
             </View>
-            <Text style={[styles.statValue, dynamicStyles.text]}>{MOCK_TECHNICIAN.rating}</Text>
+            <Text style={[styles.statValue, dynamicStyles.text]}>-</Text>
             <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Rating</Text>
           </View>
           <View style={styles.statDivider} />
@@ -114,26 +128,17 @@ export default function ProfileScreen() {
             <View style={styles.statIconContainer}>
               <Ionicons name="briefcase" size={16} color={colors.primary} />
             </View>
-            <Text style={[styles.statValue, dynamicStyles.text]}>{MOCK_TECHNICIAN.totalJobs}</Text>
+            <Text style={[styles.statValue, dynamicStyles.text]}>-</Text>
             <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Jobs</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <View style={styles.statIconContainer}>
-              <Ionicons name="calendar" size={16} color={colors.secondary} />
+              <Ionicons name="checkmark-circle" size={16} color={colors.success} />
             </View>
-            <Text style={[styles.statValue, dynamicStyles.text]}>2y</Text>
-            <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Experience</Text>
+            <Text style={[styles.statValue, dynamicStyles.text]}>Active</Text>
+            <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Status</Text>
           </View>
-        </View>
-
-        {/* Specialties */}
-        <View style={styles.specialtiesContainer}>
-          {MOCK_TECHNICIAN.specialties.map((specialty) => (
-            <View key={specialty} style={[styles.specialtyBadge, { backgroundColor: colors.primary + '20' }]}>
-              <Text style={[styles.specialtyText, { color: colors.primary }]}>{specialty}</Text>
-            </View>
-          ))}
         </View>
       </View>
 
@@ -141,10 +146,10 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>ACCOUNT</Text>
         <View style={[styles.menuCard, dynamicStyles.card]}>
-          <MenuItem icon="person-outline" label="Personal Information" isDark={isDark} />
-          <MenuItem icon="document-text-outline" label="Documents" isDark={isDark} />
-          <MenuItem icon="card-outline" label="Payment & Earnings" isDark={isDark} />
-          <MenuItem icon="trophy-outline" label="Performance" isDark={isDark} />
+          <MenuItem icon="person-outline" label="Personal Information" onPress={() => handleMenuPress('Personal Information')} isDark={isDark} />
+          <MenuItem icon="document-text-outline" label="Documents" onPress={() => handleMenuPress('Documents')} isDark={isDark} />
+          <MenuItem icon="card-outline" label="Payment & Earnings" onPress={() => handleMenuPress('Payment & Earnings')} isDark={isDark} />
+          <MenuItem icon="trophy-outline" label="Performance" onPress={() => handleMenuPress('Performance')} isDark={isDark} />
         </View>
       </View>
 
@@ -168,8 +173,8 @@ export default function ProfileScreen() {
             onSwitchChange={setNotifications}
             isDark={isDark}
           />
-          <MenuItem icon="time-outline" label="Working Hours" value="9 AM - 6 PM" isDark={isDark} />
-          <MenuItem icon="map-outline" label="Service Areas" value="Dubai, Sharjah" isDark={isDark} />
+          <MenuItem icon="time-outline" label="Working Hours" onPress={() => handleMenuPress('Working Hours')} isDark={isDark} />
+          <MenuItem icon="map-outline" label="Service Areas" onPress={() => handleMenuPress('Service Areas')} isDark={isDark} />
         </View>
       </View>
 
@@ -177,9 +182,9 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.textMuted]}>SUPPORT</Text>
         <View style={[styles.menuCard, dynamicStyles.card]}>
-          <MenuItem icon="help-circle-outline" label="Help Center" isDark={isDark} />
-          <MenuItem icon="chatbubble-outline" label="Contact Support" isDark={isDark} />
-          <MenuItem icon="book-outline" label="Training Materials" isDark={isDark} />
+          <MenuItem icon="help-circle-outline" label="Help Center" onPress={() => handleMenuPress('Help Center')} isDark={isDark} />
+          <MenuItem icon="chatbubble-outline" label="Contact Support" onPress={() => handleMenuPress('Contact Support')} isDark={isDark} />
+          <MenuItem icon="book-outline" label="Training Materials" onPress={() => handleMenuPress('Training Materials')} isDark={isDark} />
         </View>
       </View>
 
@@ -227,6 +232,10 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     marginTop: spacing.xs,
   },
+  userEmail: {
+    fontSize: fontSize.sm,
+    marginTop: spacing.xs,
+  },
   statsRow: {
     flexDirection: 'row',
     marginTop: spacing.lg,
@@ -251,22 +260,6 @@ const styles = StyleSheet.create({
     width: 1,
     height: 40,
     backgroundColor: colors.border,
-  },
-  specialtiesContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: spacing.lg,
-    gap: spacing.sm,
-    justifyContent: 'center',
-  },
-  specialtyBadge: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: borderRadius.full,
-  },
-  specialtyText: {
-    fontSize: fontSize.xs,
-    fontWeight: fontWeight.medium,
   },
   section: {
     paddingHorizontal: spacing.lg,

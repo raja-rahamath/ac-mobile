@@ -1,32 +1,80 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, Switch } from 'react-native';
-import { useState } from 'react';
-import { useRouter } from 'expo-router';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useColorScheme, Switch, ActivityIndicator, RefreshControl } from 'react-native';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
-
-const MOCK_STATS = {
-  todayJobs: 4,
-  completedToday: 2,
-  rating: 4.8,
-  earnings: 850,
-};
-
-const MOCK_NEXT_JOB = {
-  id: '1',
-  title: 'AC Repair',
-  customerName: 'Ahmed Al-Rashid',
-  address: 'Villa 23, Palm Jumeirah',
-  scheduledTime: '10:00 AM',
-  priority: 'high',
-  distance: '2.5 km',
-  eta: '12 min',
-};
+import { useAuth } from '../../src/contexts/AuthContext';
+import { getMyJobs, getStatusInfo, getPriorityInfo } from '../../src/services/jobService';
+import type { WorkOrder } from '../../src/types';
 
 export default function DashboardScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const { user } = useAuth();
   const [isOnline, setIsOnline] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [jobs, setJobs] = useState<WorkOrder[]>([]);
+  const [stats, setStats] = useState({
+    todayJobs: 0,
+    completedToday: 0,
+    activeJobs: 0,
+    pendingJobs: 0,
+  });
+
+  // Get user display info
+  const userName = user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Technician' : 'Technician';
+  const userInitial = userName.charAt(0).toUpperCase();
+
+  // Helper to format Bahrain-style address
+  const formatBahrainAddress = (job: WorkOrder): string => {
+    const sr = job.serviceRequest;
+
+    // Try Unit -> Building -> Block/Road/Area (new architecture)
+    if (sr?.unit?.building) {
+      const building = sr.unit.building;
+      const parts: string[] = [];
+
+      if (sr.unit.flatNumber) parts.push(`Flat ${sr.unit.flatNumber}`);
+      if (building.buildingNo) parts.push(`Bldg ${building.buildingNo}`);
+      if (building.road?.roadNo) parts.push(`Rd ${building.road.roadNo}`);
+      if (building.block?.blockNo) parts.push(`Blk ${building.block.blockNo}`);
+
+      const areaName = building.area?.name || building.block?.area?.name;
+      if (areaName) parts.push(areaName);
+
+      if (parts.length > 0) return parts.join(', ');
+    }
+
+    // Try legacy Property model
+    if (sr?.property) {
+      const prop = sr.property;
+      const parts: string[] = [];
+
+      if (prop.unit) parts.push(`Flat ${prop.unit}`);
+      if (prop.building) parts.push(`Bldg ${prop.building}`);
+      const areaName = prop.areaRef?.name || prop.areaName;
+      if (areaName) parts.push(areaName);
+
+      if (parts.length > 0) return parts.join(', ');
+      if (prop.address) return prop.address;
+    }
+
+    // Try work order property
+    if (job.property?.address) return job.property.address;
+
+    // Fallback to zone name
+    return sr?.zone?.name || 'Location TBD';
+  };
+
+  // Get greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
 
   const dynamicStyles = {
     container: { backgroundColor: isDark ? colors.backgroundDark : colors.background },
@@ -38,17 +86,74 @@ export default function DashboardScreen() {
     },
   };
 
+  const fetchJobs = async () => {
+    try {
+      const response = await getMyJobs({ limit: 50 });
+      const allJobs = response.data || [];
+      setJobs(allJobs);
+
+      // Calculate stats
+      const today = new Date().toDateString();
+      const todayJobs = allJobs.filter(j => {
+        const jobDate = j.scheduledDate ? new Date(j.scheduledDate).toDateString() : null;
+        return jobDate === today;
+      });
+      const completedToday = allJobs.filter(j => {
+        const completedDate = j.completedAt ? new Date(j.completedAt).toDateString() : null;
+        return completedDate === today && j.status === 'COMPLETED';
+      });
+      const activeJobs = allJobs.filter(j => ['EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(j.status));
+      const pendingJobs = allJobs.filter(j => ['PENDING', 'SCHEDULED', 'CONFIRMED'].includes(j.status));
+
+      setStats({
+        todayJobs: todayJobs.length || allJobs.length,
+        completedToday: completedToday.length,
+        activeJobs: activeJobs.length,
+        pendingJobs: pendingJobs.length,
+      });
+    } catch (err) {
+      console.error('Error fetching jobs:', err);
+    } finally {
+      setIsLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchJobs();
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchJobs();
+    }, [])
+  );
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchJobs();
+  }, []);
+
+  // Get next job (first pending/scheduled job or first active job)
+  const nextJob = jobs.find(j => ['EN_ROUTE', 'ARRIVED', 'IN_PROGRESS'].includes(j.status))
+    || jobs.find(j => ['PENDING', 'SCHEDULED', 'CONFIRMED'].includes(j.status));
+
   return (
-    <ScrollView style={[styles.container, dynamicStyles.container]}>
+    <ScrollView
+      style={[styles.container, dynamicStyles.container]}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+      }
+    >
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.profileRow}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>A</Text>
+            <Text style={styles.avatarText}>{userInitial}</Text>
           </View>
           <View>
-            <Text style={[styles.welcomeText, dynamicStyles.textMuted]}>Good morning,</Text>
-            <Text style={[styles.nameText, dynamicStyles.text]}>Ahmed Hassan</Text>
+            <Text style={[styles.welcomeText, dynamicStyles.textMuted]}>{getGreeting()},</Text>
+            <Text style={[styles.nameText, dynamicStyles.text]}>{userName}</Text>
           </View>
         </View>
         <View style={styles.statusToggle}>
@@ -70,96 +175,125 @@ export default function DashboardScreen() {
           <View style={[styles.statIcon, { backgroundColor: colors.primary + '20' }]}>
             <Ionicons name="briefcase" size={20} color={colors.primary} />
           </View>
-          <Text style={[styles.statValue, dynamicStyles.text]}>{MOCK_STATS.todayJobs}</Text>
-          <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Today's Jobs</Text>
+          <Text style={[styles.statValue, dynamicStyles.text]}>{stats.todayJobs}</Text>
+          <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Total Jobs</Text>
         </View>
         <View style={[styles.statCard, dynamicStyles.card]}>
           <View style={[styles.statIcon, { backgroundColor: colors.success + '20' }]}>
             <Ionicons name="checkmark-circle" size={20} color={colors.success} />
           </View>
-          <Text style={[styles.statValue, dynamicStyles.text]}>{MOCK_STATS.completedToday}</Text>
+          <Text style={[styles.statValue, dynamicStyles.text]}>{stats.completedToday}</Text>
           <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Completed</Text>
         </View>
         <View style={[styles.statCard, dynamicStyles.card]}>
-          <View style={[styles.statIcon, { backgroundColor: '#f59e0b20' }]}>
-            <Ionicons name="star" size={20} color="#f59e0b" />
+          <View style={[styles.statIcon, { backgroundColor: colors.info + '20' }]}>
+            <Ionicons name="construct" size={20} color={colors.info} />
           </View>
-          <Text style={[styles.statValue, dynamicStyles.text]}>{MOCK_STATS.rating}</Text>
-          <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Rating</Text>
+          <Text style={[styles.statValue, dynamicStyles.text]}>{stats.activeJobs}</Text>
+          <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Active</Text>
         </View>
         <View style={[styles.statCard, dynamicStyles.card]}>
-          <View style={[styles.statIcon, { backgroundColor: colors.secondary + '20' }]}>
-            <Ionicons name="cash" size={20} color={colors.secondary} />
+          <View style={[styles.statIcon, { backgroundColor: colors.warning + '20' }]}>
+            <Ionicons name="time" size={20} color={colors.warning} />
           </View>
-          <Text style={[styles.statValue, dynamicStyles.text]}>{MOCK_STATS.earnings}</Text>
-          <Text style={[styles.statLabel, dynamicStyles.textMuted]}>AED Today</Text>
+          <Text style={[styles.statValue, dynamicStyles.text]}>{stats.pendingJobs}</Text>
+          <Text style={[styles.statLabel, dynamicStyles.textMuted]}>Pending</Text>
         </View>
       </View>
 
       {/* Next Job Card */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>Next Job</Text>
-        <TouchableOpacity
-          style={[styles.nextJobCard, { backgroundColor: colors.primary }]}
-          onPress={() => router.push(`/job/${MOCK_NEXT_JOB.id}`)}
-        >
-          <View style={styles.nextJobHeader}>
-            <View style={styles.nextJobInfo}>
-              <Text style={styles.nextJobTitle}>{MOCK_NEXT_JOB.title}</Text>
-              <Text style={styles.nextJobCustomer}>{MOCK_NEXT_JOB.customerName}</Text>
-            </View>
-            <View style={styles.priorityBadge}>
-              <Text style={styles.priorityText}>High</Text>
-            </View>
+        {isLoading ? (
+          <View style={[styles.loadingCard, dynamicStyles.card]}>
+            <ActivityIndicator size="small" color={colors.primary} />
+            <Text style={[styles.loadingText, dynamicStyles.textMuted]}>Loading jobs...</Text>
           </View>
+        ) : nextJob ? (
+          <TouchableOpacity
+            style={[styles.nextJobCard, { backgroundColor: colors.primary }]}
+            onPress={() => router.push(`/job/${nextJob.id}`)}
+          >
+            <View style={styles.nextJobHeader}>
+              <View style={styles.nextJobInfo}>
+                <Text style={styles.nextJobTitle}>{nextJob.title || nextJob.serviceRequest?.title || 'Work Order'}</Text>
+                <Text style={styles.nextJobCustomer}>
+                  {nextJob.customer?.firstName || nextJob.serviceRequest?.customer?.firstName}{' '}
+                  {nextJob.customer?.lastName || nextJob.serviceRequest?.customer?.lastName}
+                </Text>
+              </View>
+              <View style={[styles.priorityBadge, { backgroundColor: getPriorityInfo(nextJob.priority).color + '40' }]}>
+                <Text style={styles.priorityText}>{nextJob.priority}</Text>
+              </View>
+            </View>
 
-          <View style={styles.nextJobDetails}>
-            <View style={styles.nextJobDetail}>
-              <Ionicons name="location" size={16} color={colors.white} />
-              <Text style={styles.nextJobDetailText}>{MOCK_NEXT_JOB.address}</Text>
+            <View style={styles.nextJobDetails}>
+              <View style={styles.nextJobDetail}>
+                <Ionicons name="location" size={16} color={colors.white} />
+                <Text style={styles.nextJobDetailText} numberOfLines={2}>
+                  {formatBahrainAddress(nextJob)}
+                </Text>
+              </View>
+              <View style={styles.nextJobDetail}>
+                <Ionicons name="calendar" size={16} color={colors.white} />
+                <Text style={styles.nextJobDetailText}>
+                  {nextJob.scheduledDate
+                    ? new Date(nextJob.scheduledDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+                    : 'Not scheduled'}
+                  {nextJob.scheduledDate && ` at ${new Date(nextJob.scheduledDate).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`}
+                </Text>
+              </View>
+              <View style={styles.nextJobDetail}>
+                <Ionicons name="document-text" size={16} color={colors.white} />
+                <Text style={styles.nextJobDetailText}>
+                  {nextJob.serviceRequest?.requestNo || nextJob.workOrderNo}
+                </Text>
+              </View>
             </View>
-            <View style={styles.nextJobDetail}>
-              <Ionicons name="time" size={16} color={colors.white} />
-              <Text style={styles.nextJobDetailText}>{MOCK_NEXT_JOB.scheduledTime}</Text>
-            </View>
-          </View>
 
-          <View style={styles.nextJobFooter}>
-            <View style={styles.etaContainer}>
-              <Text style={styles.etaLabel}>{MOCK_NEXT_JOB.distance} • {MOCK_NEXT_JOB.eta} away</Text>
+            <View style={styles.nextJobFooter}>
+              <View style={[styles.statusBadge, { backgroundColor: getStatusInfo(nextJob.status).color + '40' }]}>
+                <Text style={styles.statusBadgeText}>{getStatusInfo(nextJob.status).label}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.viewButton}
+                onPress={() => router.push(`/job/${nextJob.id}`)}
+              >
+                <Ionicons name="arrow-forward" size={18} color={colors.primary} />
+                <Text style={styles.viewButtonText}>View Details</Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.navigateButton}
-              onPress={() => router.push(`/navigate/${MOCK_NEXT_JOB.id}`)}
-            >
-              <Ionicons name="navigate" size={18} color={colors.primary} />
-              <Text style={styles.navigateButtonText}>Navigate</Text>
-            </TouchableOpacity>
+          </TouchableOpacity>
+        ) : (
+          <View style={[styles.emptyCard, dynamicStyles.card]}>
+            <Ionicons name="checkmark-done-circle" size={48} color={colors.success} />
+            <Text style={[styles.emptyTitle, dynamicStyles.text]}>All caught up!</Text>
+            <Text style={[styles.emptySubtitle, dynamicStyles.textMuted]}>No pending jobs at the moment</Text>
           </View>
-        </TouchableOpacity>
+        )}
       </View>
 
       {/* Quick Actions */}
       <View style={styles.section}>
         <Text style={[styles.sectionTitle, dynamicStyles.text]}>Quick Actions</Text>
         <View style={styles.actionsGrid}>
-          <TouchableOpacity style={[styles.actionCard, dynamicStyles.card]} onPress={() => router.push('/jobs')}>
+          <TouchableOpacity style={[styles.actionCard, dynamicStyles.card]} onPress={() => router.push('/(tabs)/jobs')}>
             <View style={[styles.actionIcon, { backgroundColor: colors.info + '20' }]}>
               <Ionicons name="list" size={24} color={colors.info} />
             </View>
             <Text style={[styles.actionLabel, dynamicStyles.text]}>All Jobs</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, dynamicStyles.card]} onPress={() => router.push('/schedule')}>
+          <TouchableOpacity style={[styles.actionCard, dynamicStyles.card]} onPress={() => router.push('/(tabs)/schedule')}>
             <View style={[styles.actionIcon, { backgroundColor: colors.secondary + '20' }]}>
               <Ionicons name="calendar" size={24} color={colors.secondary} />
             </View>
             <Text style={[styles.actionLabel, dynamicStyles.text]}>Schedule</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.actionCard, dynamicStyles.card]}>
+          <TouchableOpacity style={[styles.actionCard, dynamicStyles.card]} onPress={() => router.push('/(tabs)/profile')}>
             <View style={[styles.actionIcon, { backgroundColor: colors.warning + '20' }]}>
-              <Ionicons name="document-text" size={24} color={colors.warning} />
+              <Ionicons name="person" size={24} color={colors.warning} />
             </View>
-            <Text style={[styles.actionLabel, dynamicStyles.text]}>Reports</Text>
+            <Text style={[styles.actionLabel, dynamicStyles.text]}>Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.actionCard, dynamicStyles.card]}>
             <View style={[styles.actionIcon, { backgroundColor: colors.error + '20' }]}>
@@ -255,6 +389,30 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     marginBottom: spacing.md,
   },
+  loadingCard: {
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  loadingText: {
+    fontSize: fontSize.sm,
+  },
+  emptyCard: {
+    borderRadius: borderRadius.xl,
+    padding: spacing.xl,
+    borderWidth: 1,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  emptyTitle: {
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+  },
+  emptySubtitle: {
+    fontSize: fontSize.sm,
+  },
   nextJobCard: {
     borderRadius: borderRadius.xl,
     padding: spacing.lg,
@@ -265,7 +423,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     marginBottom: spacing.md,
   },
-  nextJobInfo: {},
+  nextJobInfo: {
+    flex: 1,
+  },
   nextJobTitle: {
     fontSize: fontSize.xl,
     fontWeight: fontWeight.bold,
@@ -278,7 +438,6 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   priorityBadge: {
-    backgroundColor: colors.white + '30',
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderRadius: borderRadius.full,
@@ -301,6 +460,7 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: fontSize.sm,
     opacity: 0.9,
+    flex: 1,
   },
   nextJobFooter: {
     flexDirection: 'row',
@@ -310,13 +470,17 @@ const styles = StyleSheet.create({
     borderTopColor: colors.white + '30',
     paddingTop: spacing.md,
   },
-  etaContainer: {},
-  etaLabel: {
-    color: colors.white,
-    fontSize: fontSize.sm,
-    opacity: 0.8,
+  statusBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
   },
-  navigateButton: {
+  statusBadgeText: {
+    color: colors.white,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
+  viewButton: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.white,
@@ -325,7 +489,7 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.full,
     gap: spacing.xs,
   },
-  navigateButtonText: {
+  viewButtonText: {
     color: colors.primary,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.semibold,
