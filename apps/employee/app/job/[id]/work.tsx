@@ -28,11 +28,14 @@ import type { WorkOrder, WorkOrderItem } from '../../../src/types';
 import { Timer } from '../../../src/components/Timer';
 import { PhotoCapture, CapturedPhoto } from '../../../src/components/PhotoCapture';
 import { MaterialsList, MaterialItem } from '../../../src/components/MaterialsList';
+import { useAuth } from '../../../src/contexts/AuthContext';
 
 export default function WorkScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
+  const employeeId = user?.employee?.id;
   const isDark = colorScheme === 'dark';
 
   const [job, setJob] = useState<WorkOrder | null>(null);
@@ -132,11 +135,14 @@ export default function WorkScreen() {
   }, [id]);
 
   const handleClockIn = async () => {
-    if (!job) return;
+    if (!job || !employeeId) {
+      Alert.alert('Error', 'Employee ID not found');
+      return;
+    }
 
     setIsUpdating(true);
     try {
-      await clockIn(job.id);
+      await clockIn(job.id, { employeeId });
       // Use current time as clock-in time (we just clocked in)
       const now = new Date().toISOString();
       setIsClockedIn(true);
@@ -152,7 +158,10 @@ export default function WorkScreen() {
   };
 
   const handleClockOut = async () => {
-    if (!job) return;
+    if (!job || !employeeId) {
+      Alert.alert('Error', 'Employee ID not found');
+      return;
+    }
 
     Alert.alert(
       'Clock Out',
@@ -164,11 +173,12 @@ export default function WorkScreen() {
           onPress: async () => {
             setIsUpdating(true);
             try {
-              const result = await clockOut(job.id, { notes });
+              await clockOut(job.id, { employeeId, notes });
               setIsClockedIn(false);
               setClockInTime(null);
-              setTotalWorkSeconds(result.totalTime || 0);
-              Alert.alert('Clocked Out', `Total time: ${formatTime(result.totalTime || 0)}`);
+              Alert.alert('Clocked Out', 'Work session recorded');
+              // Refresh job to get updated data
+              fetchJob();
             } catch (err: any) {
               console.error('Error clocking out:', err);
               Alert.alert('Error', err.message || 'Failed to clock out');

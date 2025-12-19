@@ -82,21 +82,36 @@ export async function startWork(id: string, data?: { employeeId: string; notes?:
 }
 
 // Clock in to work order
-export async function clockIn(id: string): Promise<{ id: string; clockInAt: string }> {
-  const response = await api.post<ApiResponse<{ id: string; clockInAt: string }>>(
+export async function clockIn(
+  id: string,
+  data: { employeeId: string; notes?: string }
+): Promise<WorkOrder> {
+  const response = await api.post<WorkOrder | ApiResponse<WorkOrder>>(
     ENDPOINTS.WORK_ORDER_CLOCK_IN(id),
-    {}
+    {
+      employeeId: data.employeeId,
+      notes: data.notes,
+    }
   );
-  return response.data;
+  // Handle both direct response and wrapped response
+  return 'data' in response && response.data ? response.data as WorkOrder : response as WorkOrder;
 }
 
 // Clock out from work order
-export async function clockOut(id: string, data?: { breakTime?: number; notes?: string }): Promise<{ id: string; clockOutAt: string; totalTime: number }> {
-  const response = await api.post<ApiResponse<{ id: string; clockOutAt: string; totalTime: number }>>(
+export async function clockOut(
+  id: string,
+  data: { employeeId: string; breakMinutes?: number; notes?: string }
+): Promise<WorkOrder> {
+  const response = await api.post<WorkOrder | ApiResponse<WorkOrder>>(
     ENDPOINTS.WORK_ORDER_CLOCK_OUT(id),
-    data || {}
+    {
+      employeeId: data.employeeId,
+      breakMinutes: data.breakMinutes || 0,
+      notes: data.notes,
+    }
   );
-  return response.data;
+  // Handle both direct response and wrapped response
+  return 'data' in response && response.data ? response.data as WorkOrder : response as WorkOrder;
 }
 
 // Put work order on hold
