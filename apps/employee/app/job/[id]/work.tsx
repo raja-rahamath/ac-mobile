@@ -91,16 +91,21 @@ export default function WorkScreen() {
         );
       }
 
-      // Check if already clocked in (you would get this from the work order data)
-      if (data.status === 'IN_PROGRESS') {
-        setIsClockedIn(true);
-        // If there's clock in time in the data, set it
-        // setClockInTime(data.clockInAt);
-      }
+      // Check if already clocked in - get from labor entries
+      if (data.status === 'IN_PROGRESS' || data.status === 'ON_HOLD') {
+        // Find active labor entry (no clock out)
+        const activeLabor = data.laborEntries?.find((entry: any) => !entry.clockOutAt);
+        if (activeLabor) {
+          setIsClockedIn(true);
+          setClockInTime(activeLabor.clockInAt);
 
-      if (data.status === 'ON_HOLD') {
-        setIsPaused(true);
-        setIsClockedIn(true);
+          // If there's prior accumulated time, we could add it here
+          // For now, the timer will calculate from clockInAt
+        }
+
+        if (data.status === 'ON_HOLD') {
+          setIsPaused(true);
+        }
       }
     } catch (err: any) {
       console.error('Error fetching job:', err);
@@ -131,9 +136,11 @@ export default function WorkScreen() {
 
     setIsUpdating(true);
     try {
-      const result = await clockIn(job.id);
+      await clockIn(job.id);
+      // Use current time as clock-in time (we just clocked in)
+      const now = new Date().toISOString();
       setIsClockedIn(true);
-      setClockInTime(result.clockInAt);
+      setClockInTime(now);
       setIsPaused(false);
       Alert.alert('Clocked In', 'Timer started');
     } catch (err: any) {
