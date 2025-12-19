@@ -78,7 +78,10 @@ export default function JobDetailScreen() {
       setJob(data);
     } catch (err: any) {
       console.error('Error fetching job:', err);
-      setError(err.message || 'Failed to load job details');
+      // Don't show error for session expiry - AuthContext will redirect to login
+      if (!err.isSessionExpired) {
+        setError(err.message || 'Failed to load job details');
+      }
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -153,17 +156,26 @@ export default function JobDetailScreen() {
     if (sr?.unit?.building) {
       const building = sr.unit.building;
 
-      // If building has coordinates, use them
+      // If building has coordinates, use them (best option)
       if (building.latitude && building.longitude) {
         return { type: 'coords', lat: building.latitude, lng: building.longitude };
       }
 
-      // Format Bahrain address for Google Maps
-      const parts: string[] = [];
-      if (building.buildingNo) parts.push(`Building ${building.buildingNo}`);
-      if (building.road?.roadNo) parts.push(`Road ${building.road.roadNo}`);
-      if (building.block?.blockNo) parts.push(`Block ${building.block.blockNo}`);
+      // Format Bahrain address for Google Maps - Block is key for navigation
+      // Format: "Block XXX, Area, Bahrain" works best in Google Maps for Bahrain
+      const blockNo = building.block?.blockNo;
       const areaName = building.area?.name || building.block?.area?.name;
+
+      if (blockNo && areaName) {
+        // Block + Area is the most reliable for Bahrain navigation
+        return { type: 'address', address: `Block ${blockNo}, ${areaName}, Bahrain` };
+      }
+
+      // Fallback: include building and road if available
+      const parts: string[] = [];
+      if (building.buildingNo) parts.push(`Building ${building.buildingNo.replace(/^0+/, '')}`);
+      if (building.road?.roadNo) parts.push(`Road ${building.road.roadNo.replace(/^0+/, '')}`);
+      if (blockNo) parts.push(`Block ${blockNo}`);
       if (areaName) parts.push(areaName);
       parts.push('Bahrain');
 
@@ -174,20 +186,34 @@ export default function JobDetailScreen() {
     if (sr?.property) {
       const prop = sr.property;
 
-      // If property has coordinates, use them
+      // If property has coordinates, use them (best option)
       if (prop.latitude && prop.longitude) {
         return { type: 'coords', lat: prop.latitude, lng: prop.longitude };
       }
 
-      // Format address
-      const parts: string[] = [];
-      if (prop.building) parts.push(`Building ${prop.building}`);
+      // Get area name
       const areaName = prop.areaRef?.name || prop.areaName;
+
+      // Try to extract Block number from address for better Google Maps matching
+      // Address format: "Flat X, Building XXXX, Road XXXX, Block XXX, Area"
+      if (prop.address) {
+        const blockMatch = prop.address.match(/Block\s*(\d+)/i);
+        if (blockMatch && areaName) {
+          // "Block XXX, Area, Bahrain" works best for Bahrain navigation
+          return { type: 'address', address: `Block ${blockMatch[1]}, ${areaName}, Bahrain` };
+        }
+        // If no block number found, use full address
+        return { type: 'address', address: `${prop.address}, Bahrain` };
+      }
+
+      // Fallback: format from components
+      const parts: string[] = [];
+      // Remove leading zeros from building number for better Google Maps matching
+      if (prop.building) parts.push(`Building ${prop.building.replace(/^0+/, '')}`);
       if (areaName) parts.push(areaName);
       parts.push('Bahrain');
 
       if (parts.length > 1) return { type: 'address', address: parts.join(', ') };
-      if (prop.address) return { type: 'address', address: `${prop.address}, Bahrain` };
     }
 
     // Try work order property

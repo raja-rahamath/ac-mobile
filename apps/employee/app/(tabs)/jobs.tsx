@@ -77,7 +77,10 @@ export default function JobsScreen() {
       setJobs(response.data || []);
     } catch (err: any) {
       console.error('Error fetching jobs:', err);
-      setError(err.message || 'Failed to load jobs');
+      // Don't show error for session expiry - AuthContext will redirect to login
+      if (!err.isSessionExpired) {
+        setError(err.message || 'Failed to load jobs');
+      }
     } finally {
       setIsLoading(false);
       setRefreshing(false);

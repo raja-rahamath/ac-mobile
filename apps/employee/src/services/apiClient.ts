@@ -143,7 +143,13 @@ export async function apiClient<T = any>(
         });
       }
     } else {
-      throw new Error('Session expired. Please login again.');
+      // Session expired - silently logout (AuthContext will redirect to login)
+      console.log('[ApiClient] Session expired, logging out silently...');
+      // Throw a special error that screens can catch and ignore
+      // The onLogout callback in clearAuthData has already been called
+      const error = new Error('Session expired');
+      (error as any).isSessionExpired = true;
+      throw error;
     }
   }
 
