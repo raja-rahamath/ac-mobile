@@ -17,13 +17,19 @@ export async function getInventoryItems(filters?: {
   const queryString = params.toString();
   const url = queryString ? `${ENDPOINTS.INVENTORY_ITEMS}?${queryString}` : ENDPOINTS.INVENTORY_ITEMS;
 
-  const response = await api.get<ApiResponse<InventoryItem[]> | InventoryItem[]>(url);
+  const response = await api.get<any>(url);
 
-  // Handle both direct array and wrapped response
+  // Handle various response formats
   if (Array.isArray(response)) {
     return response;
   }
-  return response.data || [];
+  if (response.data && Array.isArray(response.data)) {
+    return response.data;
+  }
+  if (response.success && response.data) {
+    return response.data;
+  }
+  return [];
 }
 
 // Get inventory item by ID
