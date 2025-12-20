@@ -64,4 +64,13 @@ export const ENDPOINTS = {
 
   // Employee
   EMPLOYEE_LOCATION: '/api/v1/employees/location',
+
+  // Inventory
+  INVENTORY_ITEMS: '/api/v1/inventory-items',
+  INVENTORY_ITEM_DETAIL: (id: string) => `/api/v1/inventory-items/${id}`,
+  INVENTORY_CATEGORIES: '/api/v1/inventory-categories',
+
+  // Settings/Configuration
+  CURRENCIES: '/api/v1/currencies',
+  SETTINGS: '/api/v1/settings',
 };

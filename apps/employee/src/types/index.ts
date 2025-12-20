@@ -348,3 +348,47 @@ export interface PaginatedResponse<T> {
 
 // Job Filter for UI
 export type JobFilter = 'all' | 'pending' | 'active' | 'completed';
+
+// Inventory Types
+export interface InventoryCategory {
+  id: string;
+  name: string;
+  nameAr?: string;
+  description?: string;
+  isActive: boolean;
+}
+
+export interface InventoryItem {
+  id: string;
+  itemNo: string;
+  name: string;
+  nameAr?: string;
+  categoryId: string;
+  category?: InventoryCategory;
+  description?: string;
+  unit: string;
+  unitPrice: number;
+  currentStock: number;
+  minStock: number;
+  maxStock?: number;
+  isActive: boolean;
+}
+
+// Currency Types
+export interface Currency {
+  id: string;
+  code: string;
+  name: string;
+  nameAr?: string;
+  symbol: string;
+  symbolPosition: 'before' | 'after';
+  decimalPlaces: number;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
+// App Settings
+export interface AppSettings {
+  currency: Currency;
+  language: 'en' | 'ar';
+}
