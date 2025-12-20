@@ -166,6 +166,7 @@ export async function removeItem(workOrderId: string, itemId: string): Promise<v
 // Upload photo to work order
 export async function uploadPhoto(
   workOrderId: string,
+  employeeId: string,
   photo: {
     uri: string;
     type: string;
@@ -184,7 +185,8 @@ export async function uploadPhoto(
     name: photo.name || 'photo.jpg',
   } as any);
 
-  // Add metadata
+  // Add metadata - employeeId is required for takenById
+  formData.append('employeeId', employeeId);
   formData.append('photoType', photoType);
   if (caption) formData.append('caption', caption);
   if (location) {

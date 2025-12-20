@@ -236,11 +236,17 @@ export default function WorkScreen() {
   const handleUploadPhotos = async () => {
     if (!job || photos.length === 0) return;
 
+    if (!employeeId) {
+      Alert.alert('Error', 'Employee ID not found');
+      return;
+    }
+
     setIsUploading(true);
     try {
       for (const photo of photos) {
         await uploadPhoto(
           job.id,
+          employeeId,
           {
             uri: photo.uri,
             type: photo.type,
