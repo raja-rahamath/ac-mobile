@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   TextInput,
   RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useState, useEffect, useCallback } from 'react';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -341,12 +343,17 @@ export default function WorkScreen() {
   const statusInfo = getStatusInfo(job.status);
 
   return (
-    <View style={[styles.container, dynamicStyles.container]}>
+    <KeyboardAvoidingView
+      style={[styles.container, dynamicStyles.container]}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <ScrollView
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
+        keyboardShouldPersistTaps="handled"
       >
         {/* Job Header */}
         <View style={[styles.jobHeader, dynamicStyles.card]}>
@@ -458,7 +465,7 @@ export default function WorkScreen() {
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
