@@ -24,16 +24,69 @@ const COMPLAINT_TYPE_TO_CATEGORY: Record<string, ServiceCategory> = {
   'Landscaping': 'landscaping',
 };
 
+// Build formatted address from property components
+function formatPropertyAddress(property: any): string {
+  if (!property) return 'No address specified';
+
+  // If full address is available, use it
+  if (property.address) {
+    return property.address;
+  }
+
+  // Build address from components: Flat, Building, Road, Block, Area
+  const parts: string[] = [];
+
+  if (property.flat || property.unitNo) {
+    parts.push(`Flat: ${property.flat || property.unitNo}`);
+  }
+  if (property.building) {
+    parts.push(`Building: ${property.building}`);
+  }
+  if (property.road) {
+    parts.push(`Road: ${property.road}`);
+  }
+  if (property.block) {
+    parts.push(`Block: ${property.block}`);
+  }
+  if (property.area || property.areaName) {
+    parts.push(`Area: ${property.area || property.areaName}`);
+  }
+
+  if (parts.length > 0) {
+    return parts.join(', ');
+  }
+
+  // Fallback to name if available
+  return property.name || 'No address specified';
+}
+
 // Transform API response to mobile-friendly format
 function transformServiceRequest(apiItem: any): ServiceRequest {
   // Build property address from unit/building or property
   let propertyAddress = 'No address specified';
   if (apiItem.unit) {
-    const unitNo = apiItem.unit.unitNo || apiItem.unit.flatNumber || '';
-    const buildingName = apiItem.unit.building?.name || '';
-    propertyAddress = buildingName ? `${unitNo}, ${buildingName}` : unitNo;
-  } else if (apiItem.property?.name) {
-    propertyAddress = apiItem.property.name;
+    const building = apiItem.unit.building;
+    const parts: string[] = [];
+
+    if (apiItem.unit.unitNo || apiItem.unit.flatNumber) {
+      parts.push(`Flat: ${apiItem.unit.unitNo || apiItem.unit.flatNumber}`);
+    }
+    if (building?.name) {
+      parts.push(`Building: ${building.name}`);
+    }
+    if (building?.road) {
+      parts.push(`Road: ${building.road}`);
+    }
+    if (building?.block) {
+      parts.push(`Block: ${building.block}`);
+    }
+    if (building?.area?.name) {
+      parts.push(`Area: ${building.area.name}`);
+    }
+
+    propertyAddress = parts.length > 0 ? parts.join(', ') : 'No address specified';
+  } else if (apiItem.property) {
+    propertyAddress = formatPropertyAddress(apiItem.property);
   }
 
   // Map complaint type to category
