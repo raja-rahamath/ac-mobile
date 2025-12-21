@@ -236,9 +236,9 @@ export default function NewRequestScreen() {
         // Type matches or low confidence, proceed with selected category
         await submitRequest(category);
       }
-    } catch (error: any) {
-      console.error('Error in classification or submission:', error);
-      // If classification fails, still allow submission with selected category
+    } catch (classificationError: any) {
+      // Classification failed (endpoint may not be deployed yet) - silently proceed with user's selection
+      console.log('Classification unavailable, using selected category:', classificationError?.message || 'Unknown error');
       await submitRequest(category);
     }
   };
