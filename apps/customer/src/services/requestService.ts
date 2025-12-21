@@ -33,27 +33,36 @@ function formatPropertyAddress(property: any): string {
     return property.address;
   }
 
-  // Build address from components: Flat, Building, Road, Block, Area
-  const parts: string[] = [];
+  // Parse propertyNo format: Flat-Building-Road-Block or Building-Road-Block
+  if (property.propertyNo) {
+    const parts = property.propertyNo.split('-');
+    if (parts.length >= 4) {
+      // Has flat: Flat-Building-Road-Block
+      let address = `Flat: ${parts[0]}, Building: ${parts[1]}, Road: ${parts[2]}, Block: ${parts[3]}`;
+      if (property.areaName || property.area) {
+        address += `, Area: ${property.areaName || property.area}`;
+      }
+      return address;
+    } else if (parts.length === 3) {
+      // No flat (Villa): Building-Road-Block
+      let address = `Building: ${parts[0]}, Road: ${parts[1]}, Block: ${parts[2]}`;
+      if (property.areaName || property.area) {
+        address += `, Area: ${property.areaName || property.area}`;
+      }
+      return address;
+    }
+  }
 
-  if (property.flat || property.unitNo) {
-    parts.push(`Flat: ${property.flat || property.unitNo}`);
-  }
-  if (property.building) {
-    parts.push(`Building: ${property.building}`);
-  }
-  if (property.road) {
-    parts.push(`Road: ${property.road}`);
-  }
-  if (property.block) {
-    parts.push(`Block: ${property.block}`);
-  }
-  if (property.area || property.areaName) {
-    parts.push(`Area: ${property.area || property.areaName}`);
+  // Fallback: Build from available components
+  const addrParts: string[] = [];
+  if (property.unit) addrParts.push(`Unit: ${property.unit}`);
+  if (property.building) addrParts.push(`Building: ${property.building}`);
+  if (property.areaName || property.area) {
+    addrParts.push(`Area: ${property.areaName || property.area}`);
   }
 
-  if (parts.length > 0) {
-    return parts.join(', ');
+  if (addrParts.length > 0) {
+    return addrParts.join(', ');
   }
 
   // Fallback to name if available
@@ -62,31 +71,11 @@ function formatPropertyAddress(property: any): string {
 
 // Transform API response to mobile-friendly format
 function transformServiceRequest(apiItem: any): ServiceRequest {
-  // Build property address from unit/building or property
+  // Build property address from property or customerProperty
   let propertyAddress = 'No address specified';
-  if (apiItem.unit) {
-    const building = apiItem.unit.building;
-    const parts: string[] = [];
-
-    if (apiItem.unit.unitNo || apiItem.unit.flatNumber) {
-      parts.push(`Flat: ${apiItem.unit.unitNo || apiItem.unit.flatNumber}`);
-    }
-    if (building?.name) {
-      parts.push(`Building: ${building.name}`);
-    }
-    if (building?.road) {
-      parts.push(`Road: ${building.road}`);
-    }
-    if (building?.block) {
-      parts.push(`Block: ${building.block}`);
-    }
-    if (building?.area?.name) {
-      parts.push(`Area: ${building.area.name}`);
-    }
-
-    propertyAddress = parts.length > 0 ? parts.join(', ') : 'No address specified';
-  } else if (apiItem.property) {
-    propertyAddress = formatPropertyAddress(apiItem.property);
+  const property = apiItem.property || apiItem.customerProperty?.property;
+  if (property) {
+    propertyAddress = formatPropertyAddress(property);
   }
 
   // Map complaint type to category
