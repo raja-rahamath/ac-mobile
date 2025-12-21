@@ -76,6 +76,12 @@ export default function CompleteScreen() {
   const handleComplete = async () => {
     if (!job) return;
 
+    // Validate work performed (required)
+    if (!workPerformed.trim()) {
+      Alert.alert('Work Description Required', 'Please describe the work performed before completing.');
+      return;
+    }
+
     // Validate customer signature (required)
     if (!customerSignature) {
       Alert.alert('Signature Required', 'Customer signature is required to complete the work.');
@@ -194,7 +200,9 @@ export default function CompleteScreen() {
 
         {/* Work Performed */}
         <View style={[styles.card, dynamicStyles.card]}>
-          <Text style={[styles.sectionTitle, dynamicStyles.text]}>Work Performed</Text>
+          <Text style={[styles.sectionTitle, dynamicStyles.text]}>
+            Work Performed <Text style={styles.requiredStar}>*</Text>
+          </Text>
           <TextInput
             style={[styles.textArea, dynamicStyles.input]}
             value={workPerformed}
@@ -255,7 +263,15 @@ export default function CompleteScreen() {
           />
         </View>
 
-        {/* Warning if no customer signature */}
+        {/* Warnings */}
+        {!workPerformed.trim() && (
+          <View style={styles.warningBox}>
+            <Ionicons name="warning" size={20} color={colors.warning} />
+            <Text style={styles.warningText}>
+              Work description is required to complete the work order
+            </Text>
+          </View>
+        )}
         {!customerSignature && (
           <View style={styles.warningBox}>
             <Ionicons name="warning" size={20} color={colors.warning} />
@@ -273,10 +289,10 @@ export default function CompleteScreen() {
         <TouchableOpacity
           style={[
             styles.completeButton,
-            (!customerSignature || isSubmitting) && styles.completeButtonDisabled,
+            (!customerSignature || !workPerformed.trim() || isSubmitting) && styles.completeButtonDisabled,
           ]}
           onPress={handleComplete}
-          disabled={!customerSignature || isSubmitting}
+          disabled={!customerSignature || !workPerformed.trim() || isSubmitting}
         >
           {isSubmitting ? (
             <ActivityIndicator color={colors.white} />
@@ -343,6 +359,10 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
     marginBottom: spacing.md,
+  },
+  requiredStar: {
+    color: colors.error,
+    fontWeight: fontWeight.bold,
   },
   summaryRow: {
     flexDirection: 'row',

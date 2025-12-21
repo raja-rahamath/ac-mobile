@@ -445,7 +445,18 @@ export default function NewRequestScreen() {
 
       {/* Description */}
       <View style={styles.section}>
-        <Text style={[styles.sectionTitle, dynamicStyles.text]}>Description *</Text>
+        <View style={styles.sectionTitleRow}>
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }, dynamicStyles.text]}>Description *</Text>
+          {title.trim() && description !== title && (
+            <TouchableOpacity
+              style={styles.copyFromTitleButton}
+              onPress={() => setDescription(title)}
+            >
+              <Ionicons name="copy-outline" size={14} color={colors.primary} />
+              <Text style={styles.copyFromTitleText}>Use title</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <TextInput
           style={[styles.input, styles.textArea, dynamicStyles.input]}
           placeholder="Provide more details about the issue..."
@@ -607,6 +618,26 @@ const styles = StyleSheet.create({
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
     marginBottom: spacing.md,
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.md,
+  },
+  copyFromTitleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.primary + '15',
+    borderRadius: borderRadius.md,
+  },
+  copyFromTitleText: {
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+    color: colors.primary,
   },
   categoryGrid: {
     flexDirection: 'row',

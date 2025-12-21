@@ -94,11 +94,24 @@ export async function registerProperty(input: RegisterPropertyInput): Promise<Pr
 }
 
 export async function getAreas(search?: string): Promise<Area[]> {
-  let url = ENDPOINTS.AREAS;
-  if (search) {
-    url += `?search=${encodeURIComponent(search)}`;
-  }
+  try {
+    let url = ENDPOINTS.AREAS;
+    if (search) {
+      url += `?search=${encodeURIComponent(search)}`;
+    }
 
-  const data = await api.get(url);
-  return data.data || data || [];
+    const data = await api.get(url);
+    const areas = data.data || data || [];
+
+    // Ensure we always return an array
+    if (!Array.isArray(areas)) {
+      console.warn('[PropertyService] Areas response is not an array:', areas);
+      return [];
+    }
+
+    return areas;
+  } catch (error) {
+    console.error('[PropertyService] Failed to fetch areas:', error);
+    throw error;
+  }
 }

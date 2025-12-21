@@ -17,10 +17,10 @@ import { getJobById } from '../../../src/services/jobService';
 import {
   generateInvoice,
   getInvoicesForWorkOrder,
-  formatCurrency,
   calculateInvoiceTotals,
 } from '../../../src/services/invoiceService';
-import type { WorkOrder, Invoice, WorkOrderItem } from '../../../src/types';
+import { formatCurrency, getDefaultCurrency } from '../../../src/services/inventoryService';
+import type { WorkOrder, Invoice, WorkOrderItem, Currency } from '../../../src/types';
 
 export default function InvoiceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,6 +30,7 @@ export default function InvoiceScreen() {
 
   const [job, setJob] = useState<WorkOrder | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [currency, setCurrency] = useState<Currency | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +65,11 @@ export default function InvoiceScreen() {
 
     try {
       setError(null);
+
+      // Fetch currency
+      const defaultCurrency = await getDefaultCurrency();
+      setCurrency(defaultCurrency);
+
       const jobData = await getJobById(id);
       setJob(jobData);
 
@@ -130,6 +136,17 @@ export default function InvoiceScreen() {
       </View>
     );
   }
+
+  // Helper function for currency formatting
+  const formatAmount = (amount: number): string => {
+    if (currency) {
+      return formatCurrency(amount, currency);
+    }
+    return `BD ${amount.toFixed(3)}`; // Default to BHD if currency not loaded
+  };
+
+  // Get currency symbol for labels
+  const currencySymbol = currency?.symbol || 'BD';
 
   // Calculate totals
   const materials = job.items || [];
@@ -200,7 +217,7 @@ export default function InvoiceScreen() {
             </View>
             <Text style={[styles.laborMultiplier, dynamicStyles.textMuted]}>×</Text>
             <View style={styles.laborInput}>
-              <Text style={[styles.inputLabel, dynamicStyles.textMuted]}>Rate/hr ($)</Text>
+              <Text style={[styles.inputLabel, dynamicStyles.textMuted]}>Rate/hr ({currencySymbol})</Text>
               <TextInput
                 style={[styles.input, dynamicStyles.input]}
                 value={laborRate}
@@ -214,7 +231,7 @@ export default function InvoiceScreen() {
             <View style={styles.laborTotal}>
               <Text style={[styles.inputLabel, dynamicStyles.textMuted]}>Total</Text>
               <Text style={[styles.laborTotalValue, dynamicStyles.text]}>
-                ${laborTotal.toFixed(2)}
+                {formatAmount(laborTotal)}
               </Text>
             </View>
           </View>
@@ -238,11 +255,11 @@ export default function InvoiceScreen() {
                   <View style={styles.itemInfo}>
                     <Text style={[styles.itemName, dynamicStyles.text]}>{item.description}</Text>
                     <Text style={[styles.itemMeta, dynamicStyles.textMuted]}>
-                      {item.quantity} × ${(item.unitPrice || 0).toFixed(2)}
+                      {item.quantity} × {formatAmount(item.unitPrice || 0)}
                     </Text>
                   </View>
                   <Text style={[styles.itemTotal, dynamicStyles.text]}>
-                    ${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}
+                    {formatAmount((item.quantity || 0) * (item.unitPrice || 0))}
                   </Text>
                 </View>
               ))}
@@ -251,7 +268,7 @@ export default function InvoiceScreen() {
                   Materials Subtotal:
                 </Text>
                 <Text style={[styles.materialsTotalValue, dynamicStyles.text]}>
-                  ${materialsTotal.toFixed(2)}
+                  {formatAmount(materialsTotal)}
                 </Text>
               </View>
             </>
@@ -273,7 +290,7 @@ export default function InvoiceScreen() {
               />
             </View>
             <View style={styles.adjustmentInput}>
-              <Text style={[styles.inputLabel, dynamicStyles.textMuted]}>Discount ($)</Text>
+              <Text style={[styles.inputLabel, dynamicStyles.textMuted]}>Discount ({currencySymbol})</Text>
               <TextInput
                 style={[styles.input, dynamicStyles.input]}
                 value={discount}
@@ -290,25 +307,25 @@ export default function InvoiceScreen() {
         <View style={[styles.card, styles.totalsCard, dynamicStyles.card]}>
           <View style={styles.totalRow}>
             <Text style={[styles.totalLabel, dynamicStyles.textMuted]}>Subtotal</Text>
-            <Text style={[styles.totalValue, dynamicStyles.text]}>${subtotal.toFixed(2)}</Text>
+            <Text style={[styles.totalValue, dynamicStyles.text]}>{formatAmount(subtotal)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={[styles.totalLabel, dynamicStyles.textMuted]}>
               Tax ({taxRate || 0}%)
             </Text>
-            <Text style={[styles.totalValue, dynamicStyles.text]}>${taxAmount.toFixed(2)}</Text>
+            <Text style={[styles.totalValue, dynamicStyles.text]}>{formatAmount(taxAmount)}</Text>
           </View>
           {discountAmount > 0 && (
             <View style={styles.totalRow}>
               <Text style={[styles.totalLabel, dynamicStyles.textMuted]}>Discount</Text>
               <Text style={[styles.totalValue, { color: colors.success }]}>
-                -${discountAmount.toFixed(2)}
+                -{formatAmount(discountAmount)}
               </Text>
             </View>
           )}
           <View style={[styles.totalRow, styles.grandTotalRow]}>
             <Text style={[styles.grandTotalLabel, dynamicStyles.text]}>Total</Text>
-            <Text style={[styles.grandTotalValue, dynamicStyles.text]}>${total.toFixed(2)}</Text>
+            <Text style={[styles.grandTotalValue, dynamicStyles.text]}>{formatAmount(total)}</Text>
           </View>
         </View>
 

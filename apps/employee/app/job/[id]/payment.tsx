@@ -21,7 +21,8 @@ import {
   generateReceipt,
   emailReceipt,
 } from '../../../src/services/invoiceService';
-import type { WorkOrder, Invoice, Payment } from '../../../src/types';
+import { formatCurrency, getDefaultCurrency } from '../../../src/services/inventoryService';
+import type { WorkOrder, Invoice, Payment, Currency } from '../../../src/types';
 
 type PaymentMethod = 'CASH' | 'BENEFIT_PAY';
 
@@ -38,6 +39,7 @@ export default function PaymentScreen() {
 
   const [job, setJob] = useState<WorkOrder | null>(null);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [currency, setCurrency] = useState<Currency | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,11 @@ export default function PaymentScreen() {
 
     try {
       setError(null);
+
+      // Fetch currency
+      const defaultCurrency = await getDefaultCurrency();
+      setCurrency(defaultCurrency);
+
       const jobData = await getJobById(id);
       setJob(jobData);
 
@@ -88,10 +95,10 @@ export default function PaymentScreen() {
 
       if (invoiceData) {
         setInvoice(invoiceData);
-        // Pre-fill amount with remaining balance
+        // Pre-fill amount with remaining balance (use 3 decimal places for BHD)
         const paid = invoiceData.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
         const remaining = (invoiceData.totalAmount || 0) - paid;
-        setAmount(remaining.toFixed(2));
+        setAmount(remaining.toFixed(defaultCurrency?.decimalPlaces || 3));
       }
     } catch (err: any) {
       console.error('Error fetching data:', err);
@@ -165,9 +172,10 @@ export default function PaymentScreen() {
           ]);
         }
       } else {
+        const newRemaining = (invoice.totalAmount || 0) - totalPaid;
         Alert.alert(
           'Partial Payment Recorded',
-          `$${paymentAmount.toFixed(2)} recorded. Remaining balance: $${((invoice.totalAmount || 0) - totalPaid).toFixed(2)}`,
+          `${formatAmount(paymentAmount)} recorded. Remaining balance: ${formatAmount(newRemaining)}`,
           [
             { text: 'OK', onPress: () => fetchData() },
           ]
@@ -185,7 +193,7 @@ export default function PaymentScreen() {
     if (invoice) {
       const paid = invoice.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
       const remaining = (invoice.totalAmount || 0) - paid;
-      setAmount(remaining.toFixed(2));
+      setAmount(remaining.toFixed(currency?.decimalPlaces || 3));
     }
   };
 
@@ -218,6 +226,18 @@ export default function PaymentScreen() {
     );
   }
 
+  // Helper function for currency formatting
+  const formatAmount = (amount: number): string => {
+    if (currency) {
+      return formatCurrency(amount, currency);
+    }
+    return `BD ${amount.toFixed(3)}`; // Default to BHD if currency not loaded
+  };
+
+  // Get currency symbol for labels
+  const currencySymbol = currency?.symbol || 'BD';
+  const decimalPlaces = currency?.decimalPlaces || 3;
+
   const totalPaid = invoice.payments?.reduce((sum, p) => sum + p.amount, 0) || 0;
   const remainingBalance = (invoice.totalAmount || 0) - totalPaid;
   const isFullyPaid = remainingBalance <= 0;
@@ -248,14 +268,14 @@ export default function PaymentScreen() {
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, dynamicStyles.textMuted]}>Total Amount:</Text>
             <Text style={[styles.summaryValue, dynamicStyles.text]}>
-              ${(invoice.totalAmount || 0).toFixed(2)}
+              {formatAmount(invoice.totalAmount || 0)}
             </Text>
           </View>
 
           <View style={styles.summaryRow}>
             <Text style={[styles.summaryLabel, dynamicStyles.textMuted]}>Amount Paid:</Text>
             <Text style={[styles.summaryValue, { color: colors.success }]}>
-              ${totalPaid.toFixed(2)}
+              {formatAmount(totalPaid)}
             </Text>
           </View>
 
@@ -267,7 +287,7 @@ export default function PaymentScreen() {
                 { color: isFullyPaid ? colors.success : colors.error },
               ]}
             >
-              ${remainingBalance.toFixed(2)}
+              {formatAmount(remainingBalance)}
             </Text>
           </View>
         </View>
@@ -319,7 +339,7 @@ export default function PaymentScreen() {
 
               <View style={styles.formGroup}>
                 <View style={styles.amountHeader}>
-                  <Text style={[styles.inputLabel, dynamicStyles.text]}>Amount ($)</Text>
+                  <Text style={[styles.inputLabel, dynamicStyles.text]}>Amount ({currencySymbol})</Text>
                   <TouchableOpacity onPress={handlePayFullAmount}>
                     <Text style={styles.payFullLink}>Pay Full Amount</Text>
                   </TouchableOpacity>
@@ -381,7 +401,7 @@ export default function PaymentScreen() {
                       </Text>
                     </View>
                     <Text style={[styles.paymentAmount, { color: colors.success }]}>
-                      ${payment.amount.toFixed(2)}
+                      {formatAmount(payment.amount)}
                     </Text>
                   </View>
                 ))}

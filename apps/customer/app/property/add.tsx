@@ -50,11 +50,12 @@ export default function AddPropertyScreen() {
 
   // Filter areas based on search query
   const filteredAreas = useMemo(() => {
+    if (!areas || !Array.isArray(areas)) return [];
     if (!areaSearchQuery.trim()) return areas;
     const query = areaSearchQuery.toLowerCase();
     return areas.filter(area =>
-      area.name.toLowerCase().includes(query) ||
-      (area.nameAr && area.nameAr.includes(areaSearchQuery))
+      area?.name?.toLowerCase()?.includes(query) ||
+      (area?.nameAr && area.nameAr.toLowerCase().includes(query))
     );
   }, [areas, areaSearchQuery]);
 
@@ -342,34 +343,38 @@ export default function AddPropertyScreen() {
                 </View>
                 <FlatList
                   data={filteredAreas}
-                  keyExtractor={(item) => item.id}
+                  keyExtractor={(item, index) => item?.id || `area-${index}`}
                   keyboardShouldPersistTaps="handled"
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={[
-                        styles.pickerItem,
-                        selectedArea?.id === item.id && styles.pickerItemSelected,
-                      ]}
-                      onPress={() => selectArea(item)}
-                    >
-                      <Ionicons
-                        name="location-outline"
-                        size={18}
-                        color={selectedArea?.id === item.id ? '#8B5CF6' : '#999'}
-                      />
-                      <Text
+                  renderItem={({ item }) => {
+                    if (!item) return null;
+                    const isSelected = selectedArea?.id === item.id;
+                    return (
+                      <TouchableOpacity
                         style={[
-                          styles.pickerItemText,
-                          selectedArea?.id === item.id && styles.pickerItemTextSelected,
+                          styles.pickerItem,
+                          isSelected && styles.pickerItemSelected,
                         ]}
+                        onPress={() => selectArea(item)}
                       >
-                        {item.name}
-                      </Text>
-                      {selectedArea?.id === item.id && (
-                        <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
-                      )}
-                    </TouchableOpacity>
-                  )}
+                        <Ionicons
+                          name="location-outline"
+                          size={18}
+                          color={isSelected ? '#8B5CF6' : '#999'}
+                        />
+                        <Text
+                          style={[
+                            styles.pickerItemText,
+                            isSelected && styles.pickerItemTextSelected,
+                          ]}
+                        >
+                          {item.name || 'Unknown Area'}
+                        </Text>
+                        {isSelected && (
+                          <Ionicons name="checkmark-circle" size={20} color="#8B5CF6" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
                   ListEmptyComponent={
                     <View style={styles.emptyContainer}>
                       <Ionicons name="search-outline" size={48} color="#666" />

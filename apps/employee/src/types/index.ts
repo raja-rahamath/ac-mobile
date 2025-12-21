@@ -92,6 +92,7 @@ export interface WorkOrder {
   team?: WorkOrderTeamMember[];
   items?: WorkOrderItem[];
   labor?: WorkOrderLabor[];
+  laborEntries?: WorkOrderLabor[];
   photos?: WorkOrderPhoto[];
   checklist?: WorkOrderChecklistItem[];
   checklists?: WorkOrderChecklist[];

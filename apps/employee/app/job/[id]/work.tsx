@@ -11,11 +11,15 @@ import {
   RefreshControl,
   KeyboardAvoidingView,
   Platform,
+  Image,
+  Dimensions,
+  Modal,
 } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../../src/constants/theme';
+import { API_CONFIG } from '../../../src/constants/api';
 import {
   getJobById,
   clockIn,
@@ -24,13 +28,16 @@ import {
   resumeWork,
   addItem,
   uploadPhoto,
+  getPhotos,
   getStatusInfo,
 } from '../../../src/services/jobService';
-import type { WorkOrder, WorkOrderItem } from '../../../src/types';
+import type { WorkOrder, WorkOrderItem, WorkOrderPhoto } from '../../../src/types';
 import { Timer } from '../../../src/components/Timer';
 import { PhotoCapture, CapturedPhoto } from '../../../src/components/PhotoCapture';
 import { MaterialsList, MaterialItem } from '../../../src/components/MaterialsList';
 import { useAuth } from '../../../src/contexts/AuthContext';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function WorkScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -39,6 +46,10 @@ export default function WorkScreen() {
   const { user } = useAuth();
   const employeeId = user?.employee?.id;
   const isDark = colorScheme === 'dark';
+
+  // Refs
+  const scrollViewRef = useRef<ScrollView>(null);
+  const notesInputRef = useRef<View>(null);
 
   const [job, setJob] = useState<WorkOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,7 +66,10 @@ export default function WorkScreen() {
 
   // Photos state
   const [photos, setPhotos] = useState<CapturedPhoto[]>([]);
+  const [uploadedPhotos, setUploadedPhotos] = useState<WorkOrderPhoto[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState<WorkOrderPhoto | null>(null);
+  const [showPhotoViewer, setShowPhotoViewer] = useState(false);
 
   // Materials state
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
@@ -94,6 +108,15 @@ export default function WorkScreen() {
             itemType: item.itemType || 'MATERIAL',
           }))
         );
+      }
+
+      // Fetch uploaded photos
+      try {
+        const existingPhotos = await getPhotos(id);
+        setUploadedPhotos(existingPhotos || []);
+      } catch (photoErr) {
+        console.log('Error fetching photos:', photoErr);
+        setUploadedPhotos([]);
       }
 
       // Check if already clocked in - get from labor entries
@@ -259,12 +282,49 @@ export default function WorkScreen() {
       }
       Alert.alert('Success', `${photos.length} photo(s) uploaded successfully`);
       setPhotos([]);
+      // Refresh uploaded photos list
+      const existingPhotos = await getPhotos(job.id);
+      setUploadedPhotos(existingPhotos || []);
     } catch (err: any) {
       console.error('Error uploading photos:', err);
       Alert.alert('Error', err.message || 'Failed to upload photos');
     } finally {
       setIsUploading(false);
     }
+  };
+
+  // Scroll to notes input when focused
+  const handleNotesFocus = () => {
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 300);
+  };
+
+  // Open photo viewer
+  const handlePhotoPress = (photo: WorkOrderPhoto) => {
+    setSelectedPhoto(photo);
+    setShowPhotoViewer(true);
+  };
+
+  // Get photo type label and color
+  const getPhotoTypeInfo = (type: string) => {
+    const typeMap: Record<string, { label: string; color: string }> = {
+      BEFORE: { label: 'Before', color: '#3b82f6' },
+      DURING: { label: 'During', color: '#f59e0b' },
+      AFTER: { label: 'After', color: '#22c55e' },
+      ISSUE: { label: 'Issue', color: '#ef4444' },
+      OTHER: { label: 'Other', color: '#6b7280' },
+    };
+    return typeMap[type] || { label: type, color: '#6b7280' };
+  };
+
+  // Get full photo URL (handle relative URLs)
+  const getPhotoUrl = (url: string) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    // Prepend API base URL for relative paths
+    return `${API_CONFIG.BASE_URL}${url}`;
   };
 
   const handleAddMaterial = async (item: Omit<MaterialItem, 'id'>) => {
@@ -349,6 +409,7 @@ export default function WorkScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
@@ -423,6 +484,47 @@ export default function WorkScreen() {
           />
         </View>
 
+        {/* Uploaded Photos */}
+        {uploadedPhotos.length > 0 && (
+          <View style={styles.section}>
+            <View style={[styles.uploadedPhotosContainer, dynamicStyles.card]}>
+              <Text style={[styles.sectionTitle, dynamicStyles.text]}>
+                Uploaded Photos ({uploadedPhotos.length})
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.uploadedPhotosScroll}
+              >
+                {uploadedPhotos.map((photo) => {
+                  const typeInfo = getPhotoTypeInfo(photo.photoType);
+                  return (
+                    <TouchableOpacity
+                      key={photo.id}
+                      style={styles.uploadedPhotoItem}
+                      onPress={() => handlePhotoPress(photo)}
+                    >
+                      <Image
+                        source={{ uri: getPhotoUrl(photo.url) }}
+                        style={styles.uploadedPhotoThumb}
+                        resizeMode="cover"
+                      />
+                      <View style={[styles.photoTypeBadge, { backgroundColor: typeInfo.color }]}>
+                        <Text style={styles.photoTypeBadgeText}>{typeInfo.label}</Text>
+                      </View>
+                      {photo.caption && (
+                        <Text style={[styles.photoCaption, dynamicStyles.textMuted]} numberOfLines={1}>
+                          {photo.caption}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          </View>
+        )}
+
         {/* Notes */}
         <View style={styles.section}>
           <View style={[styles.notesContainer, dynamicStyles.card]}>
@@ -431,6 +533,7 @@ export default function WorkScreen() {
               style={[styles.notesInput, dynamicStyles.input]}
               value={notes}
               onChangeText={setNotes}
+              onFocus={handleNotesFocus}
               placeholder="Add notes about the work performed..."
               placeholderTextColor={isDark ? colors.textMutedDark : colors.textMuted}
               multiline
@@ -442,6 +545,45 @@ export default function WorkScreen() {
 
         <View style={{ height: 100 }} />
       </ScrollView>
+
+      {/* Photo Viewer Modal */}
+      <Modal
+        visible={showPhotoViewer}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPhotoViewer(false)}
+      >
+        <View style={styles.photoViewerContainer}>
+          <TouchableOpacity
+            style={styles.photoViewerClose}
+            onPress={() => setShowPhotoViewer(false)}
+          >
+            <Ionicons name="close" size={28} color={colors.white} />
+          </TouchableOpacity>
+          {selectedPhoto && (
+            <>
+              <Image
+                source={{ uri: getPhotoUrl(selectedPhoto.url) }}
+                style={styles.photoViewerImage}
+                resizeMode="contain"
+              />
+              <View style={styles.photoViewerInfo}>
+                <View style={[styles.photoViewerTypeBadge, { backgroundColor: getPhotoTypeInfo(selectedPhoto.photoType).color }]}>
+                  <Text style={styles.photoViewerTypeBadgeText}>
+                    {getPhotoTypeInfo(selectedPhoto.photoType).label}
+                  </Text>
+                </View>
+                {selectedPhoto.caption && (
+                  <Text style={styles.photoViewerCaption}>{selectedPhoto.caption}</Text>
+                )}
+                <Text style={styles.photoViewerDate}>
+                  {new Date(selectedPhoto.takenAt).toLocaleString()}
+                </Text>
+              </View>
+            </>
+          )}
+        </View>
+      </Modal>
 
       {/* Bottom Action */}
       <View style={[styles.bottomAction, dynamicStyles.card]}>
@@ -573,6 +715,92 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     fontSize: fontSize.md,
     minHeight: 100,
+  },
+  // Uploaded Photos styles
+  uploadedPhotosContainer: {
+    padding: spacing.lg,
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    marginBottom: spacing.md,
+  },
+  uploadedPhotosScroll: {
+    paddingVertical: spacing.sm,
+    gap: spacing.md,
+  },
+  uploadedPhotoItem: {
+    width: 100,
+    marginRight: spacing.sm,
+  },
+  uploadedPhotoThumb: {
+    width: 100,
+    height: 100,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.border,
+  },
+  photoTypeBadge: {
+    position: 'absolute',
+    top: spacing.xs,
+    left: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 2,
+    borderRadius: borderRadius.sm,
+  },
+  photoTypeBadgeText: {
+    color: colors.white,
+    fontSize: fontSize.xs,
+    fontWeight: fontWeight.medium,
+  },
+  photoCaption: {
+    fontSize: fontSize.xs,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  // Photo Viewer Modal styles
+  photoViewerContainer: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoViewerClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 1,
+    padding: spacing.sm,
+  },
+  photoViewerImage: {
+    width: SCREEN_WIDTH,
+    height: SCREEN_WIDTH,
+  },
+  photoViewerInfo: {
+    position: 'absolute',
+    bottom: 50,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    padding: spacing.lg,
+  },
+  photoViewerTypeBadge: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    marginBottom: spacing.sm,
+  },
+  photoViewerTypeBadgeText: {
+    color: colors.white,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
+  },
+  photoViewerCaption: {
+    color: colors.white,
+    fontSize: fontSize.md,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  photoViewerDate: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: fontSize.sm,
   },
   bottomAction: {
     position: 'absolute',
