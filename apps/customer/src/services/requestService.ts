@@ -130,3 +130,24 @@ export async function cancelServiceRequest(id: string): Promise<{ message: strin
   const data = await api.post(`${ENDPOINTS.SERVICE_REQUESTS}/${id}/cancel`, {});
   return data.data || data;
 }
+
+export interface ClassificationResult {
+  suggestedTypeId: string;
+  suggestedTypeName: string;
+  confidence: 'high' | 'medium' | 'low';
+  matches: boolean;
+  explanation: string;
+}
+
+export async function classifyServiceType(
+  title: string,
+  description: string,
+  selectedTypeId?: string
+): Promise<ClassificationResult> {
+  const data = await api.post(ENDPOINTS.CLASSIFY_SERVICE, {
+    title,
+    description,
+    selectedTypeId,
+  });
+  return data.data || data;
+}

@@ -22,7 +22,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
 import { colors, spacing, borderRadius, fontSize, fontWeight } from '../../src/constants/theme';
 import { getMyProperties } from '../../src/services/propertyService';
-import { createServiceRequest } from '../../src/services/requestService';
+import { createServiceRequest, classifyServiceType } from '../../src/services/requestService';
 import { getServiceTypes, ServiceType } from '../../src/services/serviceTypesService';
 import type { Property, ServiceRequest } from '../../src/types';
 
@@ -144,25 +144,12 @@ export default function NewRequestScreen() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!category || !title || !description) {
-      showAlert('Missing Information', 'Please fill in all required fields.');
-      return;
-    }
-
-    // Validate property is selected
-    if (!selectedProperty) {
-      setShowNoPropertyAlert(true);
-      return;
-    }
-
-    setIsSubmitting(true);
-
+  const submitRequest = async (categoryToUse: string) => {
     try {
       const result = await createServiceRequest({
         title,
         description,
-        category,
+        category: categoryToUse,
         priority,
         propertyId: selectedProperty?.id,
       });
@@ -183,6 +170,76 @@ export default function NewRequestScreen() {
       showAlert('Error', errorMessage);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async () => {
+    if (!category || !title || !description) {
+      showAlert('Missing Information', 'Please fill in all required fields.');
+      return;
+    }
+
+    // Validate property is selected
+    if (!selectedProperty) {
+      setShowNoPropertyAlert(true);
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      // Call AI classification to validate service type
+      const classification = await classifyServiceType(title, description, category);
+
+      if (!classification.matches && classification.confidence !== 'low') {
+        // Show confirmation dialog for type mismatch
+        const suggestedName = classification.suggestedTypeName;
+        const currentCategory = serviceCategories.find((c: ServiceType) => c.id === category);
+        const currentName = currentCategory?.name || category;
+
+        if (Platform.OS === 'web') {
+          const useAISuggestion = window.confirm(
+            `Service Type Suggestion\n\n` +
+            `Based on your issue description, "${suggestedName}" might be more appropriate than "${currentName}".\n\n` +
+            `${classification.explanation}\n\n` +
+            `Click OK to use "${suggestedName}" or Cancel to keep "${currentName}".`
+          );
+          if (useAISuggestion) {
+            setCategory(classification.suggestedTypeId);
+            await submitRequest(classification.suggestedTypeId);
+          } else {
+            await submitRequest(category);
+          }
+        } else {
+          Alert.alert(
+            'Service Type Suggestion',
+            `Based on your issue description, "${suggestedName}" might be more appropriate than "${currentName}".\n\n${classification.explanation}`,
+            [
+              {
+                text: `Use ${suggestedName}`,
+                onPress: async () => {
+                  setCategory(classification.suggestedTypeId);
+                  await submitRequest(classification.suggestedTypeId);
+                },
+              },
+              {
+                text: `Keep ${currentName}`,
+                style: 'cancel',
+                onPress: async () => {
+                  await submitRequest(category);
+                },
+              },
+            ]
+          );
+        }
+      } else {
+        // Type matches or low confidence, proceed with selected category
+        await submitRequest(category);
+      }
+    } catch (error: any) {
+      console.error('Error in classification or submission:', error);
+      // If classification fails, still allow submission with selected category
+      await submitRequest(category);
     }
   };
 

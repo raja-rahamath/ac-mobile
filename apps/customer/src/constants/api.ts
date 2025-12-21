@@ -54,4 +54,7 @@ export const ENDPOINTS = {
 
   // Service Types
   SERVICE_TYPES: '/api/v1/customer/auth/service-types',
+
+  // AI Classification
+  CLASSIFY_SERVICE: '/api/v1/customer/auth/classify-service',
 };
